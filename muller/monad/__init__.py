@@ -1,58 +1,45 @@
-from .distribution import Dist, bernoulli, uniform, weighted
-from .giry import Giry
-from .giry_sampling import (
-    GirySampling,
-    from_sampler_fn,
+"""The monads the readings run in: ``Dist`` (finitely-supported probability
+distributions, the exact oracle) and ``LogVec`` (batched log-space measures, the
+differentiable training reading), the ``encode``/``decode`` bridges between them, and
+the generator do-notation that builds their free-monad ASTs."""
+
+from .bridge import decode, encode
+from .dist import Dist, FiniteSupport, Uniform, expectation, is_true
+from .donotation import Formula, interpret, to_free
+from .logvec import (
+    LogDefer,
+    LogLeaf,
+    LogReduced,
+    LogVec,
+    collect_leaves,
+    log_convolve,
+    log_scatter,
+    log_vec_leaf_tensor,
+    map_leaf_weights,
+    marginalize,
+    marginalize_from,
 )
-from .giry_sampling import (
-    bernoulli as giry_bernoulli,
-)
-from .giry_sampling import (
-    beta as giry_beta,
-)
-from .giry_sampling import (
-    binomial as giry_binomial,
-)
-from .giry_sampling import (
-    categorical as giry_categorical,
-)
-from .giry_sampling import (
-    geometric as giry_geometric,
-)
-from .giry_sampling import (
-    negative_binomial as giry_negative_binomial,
-)
-from .giry_sampling import (
-    normal as giry_normal,
-)
-from .giry_sampling import (
-    poisson as giry_poisson,
-)
-from .giry_sampling import (
-    uniform as giry_uniform,
-)
-from .identity import Identity
-from .non_empty_powerset import NonEmptyPowerset, from_list, singleton
 
 __all__ = [
     "Dist",
-    "uniform",
-    "weighted",
-    "bernoulli",
-    "NonEmptyPowerset",
-    "singleton",
-    "from_list",
-    "Identity",
-    "Giry",
-    "GirySampling",
-    "giry_bernoulli",
-    "giry_beta",
-    "giry_binomial",
-    "giry_categorical",
-    "giry_geometric",
-    "giry_negative_binomial",
-    "giry_normal",
-    "giry_poisson",
-    "giry_uniform",
-    "from_sampler_fn",
+    "FiniteSupport",
+    "Formula",
+    "LogDefer",
+    "LogLeaf",
+    "LogReduced",
+    "LogVec",
+    "Uniform",
+    "collect_leaves",
+    "decode",
+    "encode",
+    "expectation",
+    "interpret",
+    "is_true",
+    "log_convolve",
+    "log_scatter",
+    "log_vec_leaf_tensor",
+    "map_leaf_weights",
+    "marginalize",
+    "marginalize_from",
+    "to_free",
 ]

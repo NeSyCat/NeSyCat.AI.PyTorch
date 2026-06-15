@@ -1,65 +1,66 @@
-from collections.abc import Callable
+"""mULLER — a PyTorch implementation of the NeSyCat neurosymbolic framework.
 
-from .framework.nesy import BaseNeSyFramework
+A first-order formula is written ONCE as a Python generator (the monadic do-block),
+polymorphic over a monad ``m``, and read at two interpretations: ``Dist``
+(finitely-supported probability distributions — the exact, non-differentiable oracle)
+and ``LogVec`` (batched, non-normalized log-space measures — the differentiable
+training reading). The Kleisli bind IS the marginalization, realized as a log-space
+convolution (variable elimination) when the predicate is additively separable, and as
+the full-joint reduction otherwise.
+"""
 
-from .framework.interpretation import Interpretation
-
-from .hkt import List
+from .dispatch import Method, shared
+from .logic import big_vee, big_wedge, log_num_den, log_vec_nll, log_vec_ptrue
+from .metrics import Report, accuracy, average_reports, print_report, run_average
 from .monad import (
-    Identity,
-    NonEmptyPowerset,
     Dist,
-    bernoulli,
-    from_list,
-    singleton,
-    uniform,
-    weighted,
+    FiniteSupport,
+    Formula,
+    LogDefer,
+    LogLeaf,
+    LogReduced,
+    LogVec,
+    Uniform,
+    decode,
+    encode,
+    expectation,
+    interpret,
+    is_true,
+    log_vec_leaf_tensor,
+    map_leaf_weights,
 )
-from .nesy_framework import nesy, nesy_for_logic
-from .parser import parse
-
-
-def fn[T](func: T) -> T:
-    """Decorator to mark a method as a function in the interpretation."""
-    func.__muller_type = "fn"  # type: ignore[attr-defined]
-    return func
-
-
-def compfn[T](func: T) -> T:
-    """Decorator to mark a method as a computational function in the interpretation."""
-    func.__muller_type = "compfn"  # type: ignore[attr-defined]
-    return func
-
-
-def pred[T](func: T) -> T:
-    """Decorator to mark a method as a predicate in the interpretation."""
-    func.__muller_type = "pred"  # type: ignore[attr-defined]
-    return func
-
-
-def comppred[T](func: T) -> T:
-    """Decorator to mark a method as a computational predicate in the interpretation."""
-    func.__muller_type = "comppred"  # type: ignore[attr-defined]
-    return func
-
+from .training import convex, cross_entropy, neg_log, train_batched
 
 __all__ = [
-    "fn",
-    "compfn",
-    "pred",
-    "comppred",
-    "BaseNeSyFramework",
-    "Interpretation",
-    "nesy",
-    "nesy_for_logic",
-    "parse",
     "Dist",
-    "NonEmptyPowerset",
-    "Identity",
-    "List",
-    "from_list",
-    "singleton",
-    "uniform",
-    "weighted",
-    "bernoulli",
+    "FiniteSupport",
+    "Formula",
+    "LogDefer",
+    "LogLeaf",
+    "LogReduced",
+    "LogVec",
+    "Method",
+    "Report",
+    "Uniform",
+    "accuracy",
+    "average_reports",
+    "big_vee",
+    "big_wedge",
+    "convex",
+    "cross_entropy",
+    "decode",
+    "encode",
+    "expectation",
+    "interpret",
+    "is_true",
+    "log_num_den",
+    "log_vec_leaf_tensor",
+    "log_vec_nll",
+    "log_vec_ptrue",
+    "map_leaf_weights",
+    "neg_log",
+    "print_report",
+    "run_average",
+    "shared",
+    "train_batched",
 ]
