@@ -90,7 +90,7 @@ class monad_method[**P, R]:
         Decorator: declare the implementation of this method for `monad`.
 
             @digit.instance(LogTens)
-            def digit_logvec(self, model, img): ...
+            def digit_logtens(self, model, img): ...
         """
         def register(fn: Callable[P, R]) -> Callable[P, R]:
             self._instances[monad] = fn

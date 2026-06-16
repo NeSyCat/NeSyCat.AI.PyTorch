@@ -40,9 +40,9 @@ from muller import (
     train_batched,
 )
 from muller.dispatch import monad_method
-from muller.monad.bridge import Bridge, DistLogVecBridge
+from muller.monad.bridge import Bridge, DistLogTensBridge
 from muller.monad.interpretation import Interpretation
-from muller.monad.logvec import map_leaf_weights
+from muller.monad.logtens import map_leaf_weights
 
 # ---------------- the network: an ordinary torch nn ----------------
 #
@@ -110,22 +110,22 @@ class MNistAdditionInterpretationDist(Interpretation[Dist[Any]]):
     pass
 
 
-class MNistAdditionInterpretationLogVec(Interpretation[LogTens[Any]]):
+class MNistAdditionInterpretationLogTens(Interpretation[LogTens[Any]]):
     pass
 
 
 class MNistAddition(
     Example[
-        Dist, LogTens, MNistAdditionInterpretationDist, MNistAdditionInterpretationLogVec
+        Dist, LogTens, MNistAdditionInterpretationDist, MNistAdditionInterpretationLogTens
     ],
-    DistLogVecBridge,
+    DistLogTensBridge,
 ):
 
     @monad_method
     def digit(self, img: Monad[Image]) -> Monad[int]: ...
 
     @digit.instance(LogTens)
-    def digit_logvec(self, img: LogTens[Image]) -> LogTens[int]:
+    def digit_logtens(self, img: LogTens[Image]) -> LogTens[int]:
         model = self.tensor_interpretation.models[type(self).digit]
         return LogTens.bind(img, lambda x: LogDefer(list(range(10)), x, model))
 
@@ -163,7 +163,7 @@ def _build(model: MnistCNN) -> MNistAddition:
     models: dict[monad_method, torch.nn.Module] = {MNistAddition.digit: model}
     return MNistAddition(
         MNistAdditionInterpretationDist(models, Dist),
-        MNistAdditionInterpretationLogVec(models, LogTens),
+        MNistAdditionInterpretationLogTens(models, LogTens),
     )
 
 
@@ -222,7 +222,7 @@ def _pairs(
 
 
 # the Dist <-> LogTens bridge (the encode / enc_dist / decode methods live here).
-_BRIDGE = DistLogVecBridge()
+_BRIDGE = DistLogTensBridge()
 
 
 def _encode_obs(sums: list[int]) -> LogTens[int]:

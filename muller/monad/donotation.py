@@ -11,7 +11,7 @@ over the monad ``m`` (the Haskell ``@m``)::
 
 :func:`interpret` turns the generator into the free-monad AST of ``m`` (using m's
 ``pure``/``bind`` constructors). The quantifiers (``muller.logic``) and the
-marginalization (``muller.monad.logvec``) consume the AST. The monad is EXPLICIT
+marginalization (``muller.monad.logtens``) consume the AST. The monad is EXPLICIT
 (``m``, the monad class), never inferred.
 """
 
@@ -21,7 +21,7 @@ from collections.abc import Callable, Generator
 from typing import Any, overload
 
 from .dist import Dist
-from .logvec import LogTens
+from .logtens import LogTens
 
 type Formula[A] = Generator[Any, Any, A]
 """A monadic do-block: yields monadic values, receives bound values, returns ``A``.

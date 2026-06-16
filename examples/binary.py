@@ -28,7 +28,7 @@ import torch
 
 from muller import (
     Dist,
-    DistLogVecBridge,
+    DistLogTensBridge,
     Formula,
     LogDefer,
     LogTens,
@@ -44,7 +44,7 @@ from muller import (
 from muller.monad.dist import Pure
 
 # the Dist <-> LogTens bridge (the encode / enc_dist / decode methods live here).
-_BRIDGE = DistLogVecBridge()
+_BRIDGE = DistLogTensBridge()
 
 # ---------------- the network: an ordinary torch nn ----------------
 #
@@ -86,7 +86,7 @@ _classifier = Method[[MLP, torch.Tensor], LogTens[bool] | Dist[bool]]("classifie
 
 
 @_classifier.instance(LogTens)  # instance BinaryKlRel LogTens where
-def _classifier_logvec(model: MLP, pts: torch.Tensor) -> LogTens[bool]:
+def _classifier_logtens(model: MLP, pts: torch.Tensor) -> LogTens[bool]:
     # record the (batched) points and DEFER the forward — the whole batch is one leaf, so
     # the MLP runs exactly ONCE at marginalization.
     return LogDefer([True, False], pts, model)
@@ -111,7 +111,7 @@ _label = Method[[torch.Tensor], LogTens[bool] | Dist[bool]]("labelA")
 
 
 @_label.instance(LogTens)  # instance BinaryRel LogTens where
-def _label_logvec(pts: torch.Tensor) -> LogTens[bool]:
+def _label_logtens(pts: torch.Tensor) -> LogTens[bool]:
     # the label as a batched CERTAIN distribution: a one-hot delta per point (encode = the
     # batched eta), the LogTens analogue of MNIST's observed sum — over the WHOLE batch.
     f = inside(pts).float()  # [B] membership per point

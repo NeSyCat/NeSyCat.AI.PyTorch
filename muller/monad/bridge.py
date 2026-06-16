@@ -1,6 +1,6 @@
 """The bridge between the monads ``Dist`` (finitely-supported probability distributions)
 and ``LogTens`` (finitely-supported NON-normalized log-space measures) — the ONLY
-inter-monad structure in the framework, as METHODS on :class:`DistLogVecBridge`::
+inter-monad structure in the framework, as METHODS on :class:`DistLogTensBridge`::
 
     encode   : list[A], Tensor -> LogTens[A]  # log a [B,k] prob tensor (EMBEDDING, batch)
     enc_dist : Dist[A]         -> LogTens[A]  # the Dist => LogTens morphism (encDist)
@@ -23,7 +23,7 @@ from typing import Any
 import torch
 
 from .dist import Dist, FiniteSupport
-from .logvec import LogDefer, LogLeaf, LogTens
+from .logtens import LogDefer, LogLeaf, LogTens
 
 # eps = 1e-13: the inlined `clampNotZero`, floors exact zeros so `log` stays finite.
 _EPS = 1e-13
@@ -41,7 +41,7 @@ class Bridge[M1, M2](ABC):
         raise NotImplementedError
 
 
-class DistLogVecBridge(Bridge[Dist[Any], LogTens[Any]]):
+class DistLogTensBridge(Bridge[Dist[Any], LogTens[Any]]):
     def encode[A](self, support: list[A], probs: torch.Tensor) -> LogTens[A]:
         """Embed a batched distribution into the log world: a support (length ``k``) plus
         a per-row probability tensor ``probs : [B, k]`` (a one-hot for a certain
@@ -62,13 +62,13 @@ class DistLogVecBridge(Bridge[Dist[Any], LogTens[Any]]):
             case _:
                 raise ValueError("enc_dist: expected a FiniteSupport distribution")
 
-    def decode[A](self, logvec: LogTens[A]) -> Dist[A]:
+    def decode[A](self, logtens: LogTens[A]) -> Dist[A]:
         """Read a ``LogTens`` leaf out as a probability distribution: softmax its
         log-weights over the leaf's own support — the ``Dist`` READING / readout, per ex.
         Accepts a per-instance leaf (``[k]``, softmaxed directly) or a batched one
         (``[B, k]``, first row); a deferred neural leaf is resolved by its forward first.
         Partial: expects a single leaf (the net's logit leaf)."""
-        match logvec:
+        match logtens:
             case LogLeaf(support, log_weights):
                 row = log_weights if log_weights.dim() == 1 else log_weights[0, :]
             case LogDefer(support, inp, fwd):

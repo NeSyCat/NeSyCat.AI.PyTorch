@@ -93,7 +93,7 @@ _rep = Method[[WapNet, Problem], LogTens[Any]]("repS")
 
 
 @_rep.instance(LogTens)  # the eta-lift of the deterministic trunk (shared by the heads)
-def _rep_logvec(model: WapNet, problem: Problem) -> LogTens[Any]:
+def _rep_logtens(model: WapNet, problem: Problem) -> LogTens[Any]:
     return LogTens.pure(model.trunk(problem))
 
 

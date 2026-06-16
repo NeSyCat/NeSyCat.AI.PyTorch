@@ -13,7 +13,7 @@ from typing import Any, overload
 
 from ..monad.dist import Dist
 from ..monad.donotation import Formula
-from ..monad.logvec import LogTens
+from ..monad.logtens import LogTens
 from .boolean import BOOLEAN, Boolean
 from .signature import TwoMonBLat, big_vee_method, big_wedge_method
 from .tensor_bool import log_num_den, log_vec_nll, log_vec_ptrue

@@ -14,7 +14,7 @@ from examples import wap  # noqa: E402
 from muller import train_batched  # noqa: E402
 from muller.logic.tensor_bool import conv_structure  # noqa: E402
 from muller.monad.donotation import interpret  # noqa: E402
-from muller.monad.logvec import LogTens, collect_leaves  # noqa: E402
+from muller.monad.logtens import LogTens, collect_leaves  # noqa: E402
 
 # WAP is not yet migrated to the batched LogTens quantizer (the shared big_wedge is now
 # batched, not per-instance). Deferred — its per-instance formula/data need the obs-as-

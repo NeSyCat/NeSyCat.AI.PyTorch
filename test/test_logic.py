@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from muller import (
     Dist,
-    DistLogVecBridge,
+    DistLogTensBridge,
     LogLeaf,
     LogTens,
     big_wedge,
@@ -16,7 +16,7 @@ from muller import (
 from muller.monad.dist import Pure
 from muller.monad.donotation import Formula
 
-_bridge = DistLogVecBridge()
+_bridge = DistLogTensBridge()
 
 
 def _formula(element: tuple) -> Formula[bool]:  # type: ignore[type-arg]
@@ -28,7 +28,7 @@ def _formula(element: tuple) -> Formula[bool]:  # type: ignore[type-arg]
     return bool(s == d1 + d2)
 
 
-def test_dist_and_logvec_readings_agree() -> None:
+def test_dist_and_logtens_readings_agree() -> None:
     g = torch.Generator().manual_seed(7)
     logits1 = torch.randn(10, generator=g)
     logits2 = torch.randn(10, generator=g)
@@ -40,14 +40,14 @@ def test_dist_and_logvec_readings_agree() -> None:
     one_hot = F.one_hot(torch.tensor(observed_sum), 19).float().unsqueeze(0)  # [1, 19]
     obs = _bridge.encode(list(range(19)), one_hot)
     sat = big_wedge(LogTens, (leaf1, leaf2, obs), _formula)
-    p_logvec = float(log_vec_ptrue(sat))
+    p_logtens = float(log_vec_ptrue(sat))
 
     # Dist reading: softmax readouts (decode takes the leaf's first row) + the certain
     # observation (eta n). Dist's guard stays a COLLECTION of one instance.
     guard = [(_bridge.decode(leaf1), _bridge.decode(leaf2), Pure(observed_sum))]
     p_dist = is_true(big_wedge(Dist, guard, _formula))
 
-    assert abs(p_logvec - p_dist) < 1e-5
+    assert abs(p_logtens - p_dist) < 1e-5
 
     # and both match the hand-computed law of total probability
     p1 = torch.softmax(logits1, dim=0)

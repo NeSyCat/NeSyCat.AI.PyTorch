@@ -30,7 +30,7 @@ from torchvision.datasets import MNIST
 
 from muller import (
     Dist,
-    DistLogVecBridge,
+    DistLogTensBridge,
     Formula,
     LogDefer,
     LogTens,
@@ -46,7 +46,7 @@ from muller import (
 )
 
 # the Dist <-> LogTens bridge (the encode / enc_dist / decode methods live here).
-_BRIDGE = DistLogVecBridge()
+_BRIDGE = DistLogTensBridge()
 
 # ---------------- the network: an ordinary torch nn ----------------
 #
@@ -83,7 +83,7 @@ _digit = Method[[MnistCNN, torch.Tensor], LogTens[int] | Dist[int]]("digit")
 
 
 @_digit.instance(LogTens)  # instance MnistKlFun LogTens where
-def _digit_logvec(model: MnistCNN, img: torch.Tensor) -> LogTens[int]:
+def _digit_logtens(model: MnistCNN, img: torch.Tensor) -> LogTens[int]:
     # PER INSTANCE: record the image, DEFER the forward. The quantifier stacks the images
     # of this leaf position across the batch and runs the CNN exactly ONCE.
     return LogDefer(list(range(10)), img, model)

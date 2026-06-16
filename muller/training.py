@@ -14,7 +14,7 @@ from collections.abc import Callable, Sequence
 import torch
 
 from .logic.tensor_bool import log_vec_nll, log_vec_ptrue
-from .monad.logvec import LogTens
+from .monad.logtens import LogTens
 
 # ---------- the loss library ----------
 

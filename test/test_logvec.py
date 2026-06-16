@@ -6,7 +6,7 @@ import math
 import torch
 
 from muller import (
-    DistLogVecBridge,
+    DistLogTensBridge,
     LogDefer,
     LogLeaf,
     LogTens,
@@ -19,9 +19,9 @@ from muller import (
 from muller.logic.tensor_bool import conv_structure
 from muller.monad.dist import FiniteSupport
 from muller.monad.donotation import Formula
-from muller.monad.logvec import collect_leaves, log_scatter, marginalize
+from muller.monad.logtens import collect_leaves, log_scatter, marginalize
 
-_bridge = DistLogVecBridge()
+_bridge = DistLogTensBridge()
 
 
 def _additive_program(

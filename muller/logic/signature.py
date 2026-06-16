@@ -20,7 +20,7 @@ from typing import Any
 from ..dispatch import Method
 from ..monad.dist import Dist
 from ..monad.donotation import Formula
-from ..monad.logvec import LogTens
+from ..monad.logtens import LogTens
 
 
 class TwoMonBLat[T](ABC):

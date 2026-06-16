@@ -23,7 +23,7 @@ from .metrics import Report, accuracy, average_reports, print_report, run_averag
 from .monad import (
     Bridge,
     Dist,
-    DistLogVecBridge,
+    DistLogTensBridge,
     FiniteSupport,
     Formula,
     LogDefer,
@@ -60,7 +60,7 @@ __all__ = [
     "convex",
     "cross_entropy",
     "Bridge",
-    "DistLogVecBridge",
+    "DistLogTensBridge",
     "interpret",
     "is_true",
     "log_num_den",

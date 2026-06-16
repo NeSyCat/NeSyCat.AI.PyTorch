@@ -3,10 +3,10 @@ distributions, the exact oracle) and ``LogTens`` (batched log-space measures, th
 differentiable training reading), the ``encode``/``decode`` bridges between them, and
 the generator do-notation that builds their free-monad ASTs."""
 
-from .bridge import Bridge, DistLogVecBridge
+from .bridge import Bridge, DistLogTensBridge
 from .dist import Dist, FiniteSupport, Uniform, is_true
 from .donotation import Formula, interpret, to_free
-from .logvec import (
+from .logtens import (
     LogDefer,
     LogLeaf,
     LogReduced,
@@ -33,7 +33,7 @@ __all__ = [
     "Uniform",
     "collect_leaves",
     "Bridge",
-    "DistLogVecBridge",
+    "DistLogTensBridge",
     "interpret",
     "is_true",
     "log_convolve",

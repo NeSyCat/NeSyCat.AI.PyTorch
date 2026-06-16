@@ -4,13 +4,13 @@ training reading for the crisp ``bool`` truth object.
 ``big_wedge`` at ``LogTens`` interprets the batched per-element formula ONCE over the
 whole guard (the batch), marginalizes it in log space (:func:`log_num_den`), aggregates
 over the batch in LOG space (the mean = the product t-norm), and returns the aggregate
-as a :class:`~muller.monad.logvec.LogReduced` so the loss reads it back exactly.
+as a :class:`~muller.monad.logtens.LogReduced` so the loss reads it back exactly.
 
 :func:`log_num_den` is the marginalization DISPATCH: try the additive-separability
 probe (:func:`conv_structure`, discovered by probing the reconstructor — sums, weighted
 sums, counts, iffs; NOT hardcoded to ``+``) and route through the log-space convolution
 (variable elimination, no joint); else fall back to the full-joint
-:func:`~muller.monad.logvec.marginalize` (the oracle). The probe verdict is cached per
+:func:`~muller.monad.logtens.marginalize` (the oracle). The probe verdict is cached per
 ``(formula code, supports)`` — in eager PyTorch the probe would otherwise re-run every
 training step (in JAX it ran once at trace time).
 
@@ -30,7 +30,7 @@ import torch
 
 from ..dispatch import shared
 from ..monad.donotation import Formula, interpret
-from ..monad.logvec import (
+from ..monad.logtens import (
     LogLeaf,
     LogReduced,
     LogTens,
@@ -148,7 +148,7 @@ def num_den_from_leaves(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The marginalization dispatch over already-materialized ``[B, k]`` leaves + the
     reconstructor: the convolution fast path (probe cached under ``cache_key``) else the
-    full-joint :func:`~muller.monad.logvec.marginalize_from` with the SHARED (uniform)
+    full-joint :func:`~muller.monad.logtens.marginalize_from` with the SHARED (uniform)
     per-combo SAT mask.
 
     The mask is uniform across the batch because per-instance conditioning data enters as
@@ -199,13 +199,13 @@ def _formula_key(formula: Callable[..., Any]) -> Hashable | None:
 
 
 @big_wedge_method.instance(LogTens)  # instance A2MonBLat LogTens Bool where bigWedge =
-def _big_wedge_logvec[A](guard: A, formula: Callable[[A], Formula[bool]]) -> LogTens[bool]:
+def _big_wedge_logtens[A](guard: A, formula: Callable[[A], Formula[bool]]) -> LogTens[bool]:
     """The LogTens bigWedge — BATCHED, mirroring the Haskell ``Guard LogTens a = a``: the
     guard IS the batched data, so read the formula ONCE over the whole batch (the Kleisli
     symbols carry the batch axis, so one neural forward each), marginalize in log space
     (:func:`log_num_den`), and MEAN the per-element log-masses over the batch (the product
     t-norm = the mean NLL). The aggregate is carried verbatim as a
-    :class:`~muller.monad.logvec.LogReduced` degree so the loss reads it back exactly;
+    :class:`~muller.monad.logtens.LogReduced` degree so the loss reads it back exactly;
     ``shared`` memoizes the Kleisli forwards across the interpreter's prefix-replays."""
     with shared():
         prog = interpret(LogTens, lambda: formula(guard))
@@ -214,5 +214,5 @@ def _big_wedge_logvec[A](guard: A, formula: Callable[[A], Formula[bool]]) -> Log
 
 
 @big_vee_method.instance(LogTens)
-def _big_vee_logvec[G](guard: G, formula: Callable[[G], Formula[bool]]) -> LogTens[bool]:
+def _big_vee_logtens[G](guard: G, formula: Callable[[G], Formula[bool]]) -> LogTens[bool]:
     raise NotImplementedError("bigVee over LogTens Bool is not yet supported in log space")
