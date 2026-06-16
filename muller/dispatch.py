@@ -6,12 +6,12 @@ on the monad class. The registry is OPEN: a new monad works the moment its insta
 registered — nothing ever pattern-matches on the monad, exactly as in Haskell where
 ``digit @m`` is resolved by the type ``m``::
 
-    _digit = Method[[MnistCNN, Tensor], LogVec[int] | Dist[int]]("digit")
+    _digit = Method[[MnistCNN, Tensor], LogTens[int] | Dist[int]]("digit")
 
-    @_digit.instance(LogVec)            # instance MnistKlFun LogVec where ...
-    def _(theta: MnistCNN, img: Tensor) -> LogVec[int]: ...
+    @_digit.instance(LogTens)            # instance MnistKlFun LogTens where ...
+    def _(model: MnistCNN, img: Tensor) -> LogTens[int]: ...
 
-    _digit(LogVec, theta, img)          # resolved by the monad class, no matching
+    _digit(LogTens, model, img)          # resolved by the monad class, no matching
 
 TYPING MODEL: ``Method[**P, R]`` — ``P`` is the parameter list every instance shares
 (the monad argument stripped), ``R`` the union of the per-monad results. This checks
@@ -40,6 +40,67 @@ _Cache = dict[tuple[Any, ...], tuple[tuple[Any, ...], dict[str, Any], Any]]
 _shared: contextvars.ContextVar[_Cache | None] = contextvars.ContextVar(
     "shared", default=None
 )
+
+
+class monad_method[**P, R]:
+    def __init__(self, fn: Callable[P, R]) -> None:
+        self.fn = fn
+        self.owner: type | None = None
+        self._instances: dict[type, Callable[P, R]] = {}
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.owner = owner
+        self.name = name
+
+    def __get__(self, obj: Any, objtype: type | None = None) -> Any:
+        """Support both bound (instance.digit(...)) and unbound calls."""
+        if obj is None:
+            return self
+        # Return a bound version that fills in `self` (the instance)
+        import functools
+        return functools.partial(self._dispatch, obj)
+
+    def _dispatch(self, slf: Any, monad: type, *args: Any, **kwargs: Any) -> R:
+        impl = self._instances.get(monad)
+        if impl is None:
+            owner_name = self.owner.__name__ if self.owner else "<?>"
+            raise TypeError(
+                f"no instance of {owner_name}.{self.fn.__name__!r} "
+                f"for monad {monad.__name__!r} "
+                "(register one with .instance)"
+            )
+
+        cache = _shared.get()
+        if cache is None:
+            return impl(slf, *args, **kwargs)
+
+        key = (
+            (self.owner.__name__ if self.owner else "") + "." + self.fn.__name__,
+            monad,
+            id(slf),
+            *(id(a) for a in args),
+            *((k, id(v)) for k, v in sorted(kwargs.items())),
+        )
+        if key not in cache:
+            cache[key] = (args, kwargs, impl(slf, *args, **kwargs))
+        return cast(R, cache[key][2])
+
+    def instance(self, monad: type) -> Callable[[Callable[P, R]], Callable[P, R]]:
+        """
+        Decorator: declare the implementation of this method for `monad`.
+
+            @digit.instance(LogTens)
+            def digit_logvec(self, model, img): ...
+        """
+        def register(fn: Callable[P, R]) -> Callable[P, R]:
+            self._instances[monad] = fn
+            return fn
+        return register
+
+    def __call__(self, *args: Any, **kwargs: Any) -> R:
+        # Called unbound (e.g. from inside __set_name__ or class body)
+        # or when __get__ hasn't been invoked.
+        return self._dispatch(*args, **kwargs)
 
 
 class Method[**P, R]:

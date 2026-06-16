@@ -4,7 +4,7 @@ the probability / oracle reading.
 The ``Dist`` ``big_wedge`` interprets the per-element formula for every guard element,
 sequences the resulting ``Dist[bool]`` values monadically (:func:`map_m_dist`, the law
 of total probability via the Dist bind), and folds the truth values with the lattice
-meet. It is the exact, non-differentiable oracle; training goes through the ``LogVec``
+meet. It is the exact, non-differentiable oracle; training goes through the ``LogTens``
 reading (``muller.logic.tensor_bool``).
 """
 

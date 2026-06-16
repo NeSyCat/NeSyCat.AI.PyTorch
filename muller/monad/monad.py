@@ -1,0 +1,2 @@
+class Monad[A]:
+    pass

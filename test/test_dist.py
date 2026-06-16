@@ -1,21 +1,21 @@
 """The Dist monad: expectation (the law of total probability) + the do-notation."""
 
-from muller import Dist, FiniteSupport, Uniform, expectation, interpret, is_true
+from muller import Dist, FiniteSupport, Uniform, interpret, is_true
 from muller.monad.dist import Bind, Pure
 
 
 def test_expectation_pure() -> None:
-    assert expectation(Pure(3), float) == 3.0
+    assert Pure(3).expectation(float) == 3.0
 
 
 def test_expectation_finite_support() -> None:
     d = FiniteSupport([(0, 0.25), (1, 0.75)])
-    assert expectation(d, float) == 0.75
+    assert d.expectation(float) == 0.75
 
 
 def test_expectation_uniform() -> None:
     d = Uniform([1, 2, 3, 4])
-    assert abs(expectation(d, float) - 2.5) < 1e-12
+    assert abs(d.expectation(float) - 2.5) < 1e-12
 
 
 def test_expectation_bind_is_total_probability() -> None:

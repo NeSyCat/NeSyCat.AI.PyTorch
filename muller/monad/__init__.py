@@ -1,16 +1,16 @@
 """The monads the readings run in: ``Dist`` (finitely-supported probability
-distributions, the exact oracle) and ``LogVec`` (batched log-space measures, the
+distributions, the exact oracle) and ``LogTens`` (batched log-space measures, the
 differentiable training reading), the ``encode``/``decode`` bridges between them, and
 the generator do-notation that builds their free-monad ASTs."""
 
-from .bridge import decode, encode
-from .dist import Dist, FiniteSupport, Uniform, expectation, is_true
+from .bridge import Bridge, DistLogVecBridge
+from .dist import Dist, FiniteSupport, Uniform, is_true
 from .donotation import Formula, interpret, to_free
 from .logvec import (
     LogDefer,
     LogLeaf,
     LogReduced,
-    LogVec,
+    LogTens,
     collect_leaves,
     log_convolve,
     log_scatter,
@@ -19,20 +19,21 @@ from .logvec import (
     marginalize,
     marginalize_from,
 )
+from .monad import Monad
 
 __all__ = [
+    "Monad",
     "Dist",
     "FiniteSupport",
     "Formula",
     "LogDefer",
     "LogLeaf",
     "LogReduced",
-    "LogVec",
+    "LogTens",
     "Uniform",
     "collect_leaves",
-    "decode",
-    "encode",
-    "expectation",
+    "Bridge",
+    "DistLogVecBridge",
     "interpret",
     "is_true",
     "log_convolve",

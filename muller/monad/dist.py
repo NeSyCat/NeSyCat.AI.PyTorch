@@ -15,8 +15,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from .monad import Monad
 
-class Dist[A]:
+
+class Dist[A](Monad[A]):
     """Free monad: finitely-supported probability distributions."""
 
     _locked = False
@@ -34,6 +36,22 @@ class Dist[A]:
     @classmethod
     def bind[B, C](cls, m: Dist[B], k: Callable[[B], Dist[C]]) -> Dist[C]:
         return Bind(m, k)
+
+    def expectation(self, f: Callable[[A], float]) -> float:
+        """``E[f | dist]`` via the law of total probability — the bind is transparent,
+        ``E[f | bind m k] = E[x |-> E[f | k x] | m]``, so no joint ever materializes."""
+        match self:
+            case Pure(value):
+                return f(value)
+            case Bind(m, k):
+                return m.expectation(lambda x: k(x).expectation(f))
+            case FiniteSupport(support):
+                return sum(p * f(x) for x, p in support)
+            case Uniform(values):
+                p = 1 / len(values)
+                return sum(p * f(x) for x in values)
+            case _:
+                raise ValueError("Unknown distribution type")
 
 
 class Pure[A](Dist[A]):
@@ -77,23 +95,6 @@ class Uniform[A](Dist[A]):
 Dist._locked = True
 
 
-def expectation[A](dist: Dist[A], f: Callable[[A], float]) -> float:
-    """``E[f | dist]`` via the law of total probability — the bind is transparent,
-    ``E[f | bind m k] = E[x |-> E[f | k x] | m]``, so no joint ever materializes."""
-    match dist:
-        case Pure(value):
-            return f(value)
-        case Bind(m, k):
-            return expectation(m, lambda x: expectation(k(x), f))
-        case FiniteSupport(support):
-            return sum(p * f(x) for x, p in support)
-        case Uniform(values):
-            p = 1 / len(values)
-            return sum(p * f(x) for x in values)
-        case _:
-            raise ValueError("Unknown distribution type")
-
-
 def is_true(dist: Dist[bool]) -> float:
     """``P(True)`` for a ``Dist[bool]`` — the canonical ``[0,1]`` readout."""
-    return expectation(dist, lambda x: 1.0 if x else 0.0)
+    return dist.expectation(lambda x: 1.0 if x else 0.0)

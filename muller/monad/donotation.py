@@ -3,9 +3,9 @@
 A formula is written ONCE as a GENERATOR function (the monadic do-block), polymorphic
 over the monad ``m`` (the Haskell ``@m``)::
 
-    def formula(m, theta, x, y, n):
-        d1 = yield digit(m, theta, x)   # digit is polymorphic over m
-        d2 = yield digit(m, theta, y)
+    def formula(m, model, x, y, n):
+        d1 = yield digit(m, model, x)   # digit is polymorphic over m
+        d2 = yield digit(m, model, y)
         s = yield n
         return s == d1 + d2
 
@@ -21,7 +21,7 @@ from collections.abc import Callable, Generator
 from typing import Any, overload
 
 from .dist import Dist
-from .logvec import LogVec
+from .logvec import LogTens
 
 type Formula[A] = Generator[Any, Any, A]
 """A monadic do-block: yields monadic values, receives bound values, returns ``A``.
@@ -59,8 +59,8 @@ def to_free[A](
 def interpret[A](m: type[Dist[Any]], gen_thunk: Callable[[], Formula[A]]) -> Dist[A]: ...
 @overload
 def interpret[A](
-    m: type[LogVec[Any]], gen_thunk: Callable[[], Formula[A]]
-) -> LogVec[A]: ...
+    m: type[LogTens[Any]], gen_thunk: Callable[[], Formula[A]]
+) -> LogTens[A]: ...
 
 
 def interpret(m: Any, gen_thunk: Callable[[], Formula[Any]]) -> Any:

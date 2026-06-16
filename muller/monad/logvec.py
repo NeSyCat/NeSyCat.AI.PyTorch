@@ -1,4 +1,4 @@
-"""The ``LogVec`` monad: the log-space sibling of ``Dist``.
+"""The ``LogTens`` monad: the log-space sibling of ``Dist``.
 
 A free monad whose leaves carry a batched, log-weighted finite support — finitely
 supported, NON-normalized, log-space measures. The Kleisli BIND is the marginalization,
@@ -14,7 +14,7 @@ AST by ``muller.monad.donotation.to_free``.
                                 stacks them to ``[B, k]`` (the autograd carrier) — the
                                 kernels below all operate on the stacked ``[B, k]`` form.
   ``LogDefer xs inp fwd``    -- a DEFERRED neural leaf: support ``xs`` + a recorded input
-                                ``inp`` and forward ``fwd`` (e.g. ``cnn theta``), the CNN
+                                ``inp`` and forward ``fwd`` (e.g. ``cnn model``), the CNN
                                 NOT yet run. The quantifier stacks the inputs of the same
                                 leaf position across the batch and runs ``fwd`` ONCE
                                 (one forward per neural symbol per batch); a direct
@@ -34,8 +34,10 @@ from typing import Any
 
 import torch
 
+from .monad import Monad
 
-class LogVec[A]:
+
+class LogTens[A](Monad[A]):
     """Free monad with log-space finitely-supported leaves."""
 
     _locked = False
@@ -43,19 +45,19 @@ class LogVec[A]:
     # The constructor set is closed (an ADT): no new cases after this module is loaded.
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if LogVec._locked:
-            raise TypeError("LogVec is a closed ADT; subclassing is not allowed.")
+        if LogTens._locked:
+            raise TypeError("LogTens is a closed ADT; subclassing is not allowed.")
 
     @classmethod
-    def pure[B](cls, value: B) -> LogVec[B]:
+    def pure[B](cls, value: B) -> LogTens[B]:
         return Pure(value)
 
     @classmethod
-    def bind[B, C](cls, m: LogVec[B], k: Callable[[B], LogVec[C]]) -> LogVec[C]:
+    def bind[B, C](cls, m: LogTens[B], k: Callable[[B], LogTens[C]]) -> LogTens[C]:
         return Bind(m, k)
 
 
-class Pure[A](LogVec[A]):
+class Pure[A](LogTens[A]):
     value: A
 
     __match_args__ = ("value",)
@@ -64,18 +66,18 @@ class Pure[A](LogVec[A]):
         self.value = value
 
 
-class Bind[A, B](LogVec[A]):
-    dist: LogVec[B]
-    func: Callable[[B], LogVec[A]]
+class Bind[A, B](LogTens[A]):
+    dist: LogTens[B]
+    func: Callable[[B], LogTens[A]]
 
     __match_args__ = ("dist", "func")
 
-    def __init__(self, dist: LogVec[B], func: Callable[[B], LogVec[A]]):
+    def __init__(self, dist: LogTens[B], func: Callable[[B], LogTens[A]]):
         self.dist = dist
         self.func = func
 
 
-class LogLeaf[A](LogVec[A]):
+class LogLeaf[A](LogTens[A]):
     support: list[A]
     """The enumerable index set (host values, length k)."""
 
@@ -89,7 +91,7 @@ class LogLeaf[A](LogVec[A]):
         self.log_weights = log_weights
 
 
-class LogDefer[A](LogVec[A]):
+class LogDefer[A](LogTens[A]):
     """A deferred neural leaf: a finite support plus a recorded input and forward, the
     forward NOT yet run. Resolves to a :class:`LogLeaf`'s log-weights by ``fwd(inp)`` —
     the quantifier does this in BATCH (one forward per leaf position over the stacked
@@ -102,7 +104,7 @@ class LogDefer[A](LogVec[A]):
 
     fwd: Callable[[torch.Tensor], torch.Tensor]
     """The deferred forward, mapping a stacked input ``[B, ...]`` to log-weights
-    ``[B, k]`` (e.g. ``lambda batch: cnn(theta, batch)``)."""
+    ``[B, k]`` (e.g. ``lambda batch: cnn(model, batch)``)."""
 
     __match_args__ = ("support", "inp", "fwd")
 
@@ -117,7 +119,7 @@ class LogDefer[A](LogVec[A]):
         self.fwd = fwd
 
 
-class LogReduced(LogVec[bool]):
+class LogReduced(LogTens[bool]):
     log_num: torch.Tensor
     """Log mass of the SAT outcome (a ``[B]`` or scalar tensor)."""
 
@@ -131,7 +133,7 @@ class LogReduced(LogVec[bool]):
         self.log_den = log_den
 
 
-LogVec._locked = True
+LogTens._locked = True
 
 
 # A flattened leaf is either a materialized LogLeaf or a deferred neural leaf; both carry
@@ -140,9 +142,9 @@ type Leaf[A] = LogLeaf[A] | LogDefer[A]
 
 
 def collect_leaves[A](
-    prog: LogVec[A],
+    prog: LogTens[A],
 ) -> tuple[list[Leaf[Any]], Callable[[list[int]], A]]:
-    """Flatten an applicative LogVec chain into its leaves + a reconstructor from a
+    """Flatten an applicative LogTens chain into its leaves + a reconstructor from a
     chosen index-combo (one index per leaf, in order) to the final value.
 
     Assumes the chain is applicative: each leaf's structure is independent of earlier
@@ -173,7 +175,7 @@ def collect_leaves[A](
                 "read it via log_num_den, do not collect"
             )
         case _:
-            raise ValueError("Unknown LogVec type")
+            raise ValueError("Unknown LogTens type")
 
 
 def log_scatter(nbins: int, idx: list[int], c: torch.Tensor) -> torch.Tensor:
@@ -251,7 +253,7 @@ def to_log_leaf[A](leaf: Leaf[A]) -> LogLeaf[A]:
 
 
 def marginalize[A](
-    prog: LogVec[A], sat_mask: Callable[[list[A]], torch.Tensor]
+    prog: LogTens[A], sat_mask: Callable[[list[A]], torch.Tensor]
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The vectorized full-joint marginalization — KEPT as the correctness oracle and
     the fallback for predicates that are not an equality against an additive function
@@ -295,7 +297,7 @@ def marginalize_from[A](
     return (log_num, log_den)
 
 
-def log_vec_leaf_tensor[A](prog: LogVec[A]) -> torch.Tensor:
+def log_vec_leaf_tensor[A](prog: LogTens[A]) -> torch.Tensor:
     """The raw ``[B, k]`` log-weight tensor of a leaf (for argmax-style decoding, e.g.
     the digit-accuracy metric). Resolves a deferred neural leaf by running its forward
     on its recorded input (at test time that input is the whole batch). Errors if not a
@@ -305,13 +307,16 @@ def log_vec_leaf_tensor[A](prog: LogVec[A]) -> torch.Tensor:
             return log_weights
         case LogDefer(_, inp, fwd):
             return fwd(inp)
+        case Bind(Pure(value), func):
+            # reduce a trivial (eta) bind: the left-unit law  bind (pure x) f = f x
+            return log_vec_leaf_tensor(func(value))
         case _:
             raise ValueError("log_vec_leaf_tensor: not a leaf")
 
 
 def map_leaf_weights[A](
-    f: Callable[[torch.Tensor], torch.Tensor], prog: LogVec[A]
-) -> LogVec[A]:
+    f: Callable[[torch.Tensor], torch.Tensor], prog: LogTens[A]
+) -> LogTens[A]:
     """Apply a tensor map to a leaf's ``[B, k]`` weights, keeping its support (e.g. to
     gather/slice a batched observation leaf along the batch dim 0 — mini-batching the
     data without leaving the monad). Errors on a non-leaf (a batched observation is

@@ -1,7 +1,7 @@
-"""The ``LogVec`` interpretation of the quantifiers + the readouts — the differentiable
+"""The ``LogTens`` interpretation of the quantifiers + the readouts — the differentiable
 training reading for the crisp ``bool`` truth object.
 
-``big_wedge`` at ``LogVec`` interprets the batched per-element formula ONCE over the
+``big_wedge`` at ``LogTens`` interprets the batched per-element formula ONCE over the
 whole guard (the batch), marginalizes it in log space (:func:`log_num_den`), aggregates
 over the batch in LOG space (the mean = the product t-norm), and returns the aggregate
 as a :class:`~muller.monad.logvec.LogReduced` so the loss reads it back exactly.
@@ -22,7 +22,7 @@ The two readouts, from one marginalization::
 
 from __future__ import annotations
 
-from collections.abc import Callable, Hashable, Iterable
+from collections.abc import Callable, Hashable
 from functools import reduce
 from typing import Any
 
@@ -31,10 +31,9 @@ import torch
 from ..dispatch import shared
 from ..monad.donotation import Formula, interpret
 from ..monad.logvec import (
-    LogDefer,
     LogLeaf,
     LogReduced,
-    LogVec,
+    LogTens,
     collect_leaves,
     log_convolve,
     marginalize_from,
@@ -128,9 +127,9 @@ def _supports_key(leaves: list[LogLeaf[Any]]) -> Hashable | None:
 
 
 def log_num_den(
-    prog: LogVec[bool], cache_key: Hashable | None = None
+    prog: LogTens[bool], cache_key: Hashable | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Marginalize a ``LogVec[bool]`` program to ``(log_num, log_den)`` — log mass of
+    """Marginalize a ``LogTens[bool]`` program to ``(log_num, log_den)`` — log mass of
     the SAT outcome and log total mass. Dispatch: pre-marginalized ``LogReduced`` is
     read directly; else resolve any deferred neural leaf on its own input and route
     through :func:`num_den_from_leaves`."""
@@ -149,8 +148,13 @@ def num_den_from_leaves(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The marginalization dispatch over already-materialized ``[B, k]`` leaves + the
     reconstructor: the convolution fast path (probe cached under ``cache_key``) else the
-    full-joint :func:`~muller.monad.logvec.marginalize_from`. The quantifier feeds the
-    leaves it stacked itself; :func:`log_num_den` feeds a single program's leaves."""
+    full-joint :func:`~muller.monad.logvec.marginalize_from` with the SHARED (uniform)
+    per-combo SAT mask.
+
+    The mask is uniform across the batch because per-instance conditioning data enters as
+    DATA in a leaf's support (e.g. WAP's observed ``(numbers, answer)`` leaf), bound by
+    the formula like any other symbol — so the predicate is one function of the leaf
+    indices, and per-element selection is carried by that leaf's ``[B, k]`` weights."""
     key: Hashable | None = None
     if cache_key is not None:
         supports = _supports_key(leaves)
@@ -167,21 +171,22 @@ def num_den_from_leaves(
     if structure is not None:
         return _conv_apply(leaves, structure)
 
-    dtype = leaves[0].log_weights.dtype if leaves else torch.get_default_dtype()
+    lws = [leaf.log_weights for leaf in leaves]
+    dtype = lws[0].dtype if lws else torch.get_default_dtype()
     return marginalize_from(
-        [leaf.log_weights for leaf in leaves],
+        lws,
         vals,
         lambda vs: torch.tensor([1.0 if v else 0.0 for v in vs], dtype=dtype),
     )
 
 
-def log_vec_nll(sat: LogVec[bool], cache_key: Hashable | None = None) -> torch.Tensor:
+def log_vec_nll(sat: LogTens[bool], cache_key: Hashable | None = None) -> torch.Tensor:
     """Negative-log satisfaction ``-log P(true) = log_den - log_num`` — the LOSS."""
     log_num, log_den = log_num_den(sat, cache_key)
     return log_den - log_num
 
 
-def log_vec_ptrue(sat: LogVec[bool], cache_key: Hashable | None = None) -> torch.Tensor:
+def log_vec_ptrue(sat: LogTens[bool], cache_key: Hashable | None = None) -> torch.Tensor:
     """Satisfaction probability ``P(true) = exp(log_num - log_den)`` — the READING."""
     log_num, log_den = log_num_den(sat, cache_key)
     return torch.exp(log_num - log_den)
@@ -193,68 +198,21 @@ def _formula_key(formula: Callable[..., Any]) -> Hashable | None:
     return getattr(formula, "__code__", None)
 
 
-def _stack_guard_leaves[A](
-    guard: Iterable[A], formula: Callable[[A], Formula[bool]]
-) -> tuple[list[LogLeaf[Any]], Callable[[list[int]], Any]]:
-    """The batching boundary: read the PER-INSTANCE formula over each guard element
-    (cheap — the neural leaves are deferred, no forward yet), align the leaves by
-    position (valid under the applicative-formula assumption), then stack each position
-    over the batch into a ``[B, k]`` :class:`LogLeaf` — running each deferred neural
-    forward exactly ONCE over the stacked inputs. Returns the stacked leaves and the
-    (shared) reconstructor."""
-    def per_instance_ast(e: A) -> LogVec[bool]:
-        return interpret(LogVec, lambda: formula(e))
-
-    per_elem = [collect_leaves(per_instance_ast(e)) for e in guard]
-    if not per_elem:
-        raise ValueError("big_wedge at LogVec: empty guard")
-    leaves_per_elem = [leaves for leaves, _ in per_elem]
-    vals = per_elem[0][1]  # the reconstructor is shared across elements (applicative)
-
-    n_leaves = len(leaves_per_elem[0])
-    if any(len(ls) != n_leaves for ls in leaves_per_elem):
-        raise ValueError(
-            "big_wedge at LogVec: guard elements yield different leaf structures "
-            "(the formula is not applicative-uniform over the guard); batched "
-            "marginalization needs a uniform structure."
-        )
-
-    stacked: list[LogLeaf[Any]] = []
-    for pos in range(n_leaves):
-        col = [ls[pos] for ls in leaves_per_elem]
-        head = col[0]
-        support = head.support
-        if any(leaf.support != support for leaf in col):
-            raise ValueError(
-                f"big_wedge at LogVec: leaf {pos} has a non-uniform support across "
-                "the guard; cannot stack."
-            )
-        if isinstance(head, LogDefer):
-            inputs = torch.stack([leaf.inp for leaf in col], dim=0)  # type: ignore[union-attr]
-            lw = head.fwd(inputs)  # [B, k] — ONE forward for this neural position
-        else:  # per-instance LogLeaf: [k] weights, stack to [B, k]
-            lw = torch.stack([leaf.log_weights for leaf in col], dim=0)  # type: ignore[union-attr]
-        stacked.append(LogLeaf(support, lw))
-    return stacked, vals
-
-
-@big_wedge_method.instance(LogVec)  # instance A2MonBLat LogVec Bool where bigWedge =
-def _big_wedge_logvec[A](
-    guard: Iterable[A], formula: Callable[[A], Formula[bool]]
-) -> LogVec[bool]:
-    """The LogVec bigWedge: range over the guard COLLECTION, stack the per-instance
-    leaves into a batch (one neural forward per leaf position), marginalize, and
-    aggregate the per-element satisfaction over the batch in log space (the mean = the
-    product t-norm). ``shared`` memoizes the Kleisli forwards across the interpreter's
-    replays within each element."""
+@big_wedge_method.instance(LogTens)  # instance A2MonBLat LogTens Bool where bigWedge =
+def _big_wedge_logvec[A](guard: A, formula: Callable[[A], Formula[bool]]) -> LogTens[bool]:
+    """The LogTens bigWedge — BATCHED, mirroring the Haskell ``Guard LogTens a = a``: the
+    guard IS the batched data, so read the formula ONCE over the whole batch (the Kleisli
+    symbols carry the batch axis, so one neural forward each), marginalize in log space
+    (:func:`log_num_den`), and MEAN the per-element log-masses over the batch (the product
+    t-norm = the mean NLL). The aggregate is carried verbatim as a
+    :class:`~muller.monad.logvec.LogReduced` degree so the loss reads it back exactly;
+    ``shared`` memoizes the Kleisli forwards across the interpreter's prefix-replays."""
     with shared():
-        leaves, vals = _stack_guard_leaves(guard, formula)
-        log_num, log_den = num_den_from_leaves(
-            leaves, vals, cache_key=_formula_key(formula)
-        )
+        prog = interpret(LogTens, lambda: formula(guard))
+        log_num, log_den = log_num_den(prog, cache_key=_formula_key(formula))
         return LogReduced(log_num.mean(), log_den.mean())
 
 
-@big_vee_method.instance(LogVec)
-def _big_vee_logvec[G](guard: G, formula: Callable[[G], Formula[bool]]) -> LogVec[bool]:
-    raise NotImplementedError("bigVee over LogVec Bool is not yet supported in log space")
+@big_vee_method.instance(LogTens)
+def _big_vee_logvec[G](guard: G, formula: Callable[[G], Formula[bool]]) -> LogTens[bool]:
+    raise NotImplementedError("bigVee over LogTens Bool is not yet supported in log space")

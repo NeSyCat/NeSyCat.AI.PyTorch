@@ -3,27 +3,35 @@
 A first-order formula is written ONCE as a Python generator (the monadic do-block),
 polymorphic over a monad ``m``, and read at two interpretations: ``Dist``
 (finitely-supported probability distributions — the exact, non-differentiable oracle)
-and ``LogVec`` (batched, non-normalized log-space measures — the differentiable
+and ``LogTens`` (batched, non-normalized log-space measures — the differentiable
 training reading). The Kleisli bind IS the marginalization, realized as a log-space
 convolution (variable elimination) when the predicate is additively separable, and as
 the full-joint reduction otherwise.
 """
 
 from .dispatch import Method, shared
-from .logic import big_vee, big_wedge, log_num_den, log_vec_nll, log_vec_ptrue
+from .logic import (
+    Exists,
+    ForAll,
+    big_vee,
+    big_wedge,
+    log_num_den,
+    log_vec_nll,
+    log_vec_ptrue,
+)
 from .metrics import Report, accuracy, average_reports, print_report, run_average
 from .monad import (
+    Bridge,
     Dist,
+    DistLogVecBridge,
     FiniteSupport,
     Formula,
     LogDefer,
     LogLeaf,
     LogReduced,
-    LogVec,
+    LogTens,
+    Monad,
     Uniform,
-    decode,
-    encode,
-    expectation,
     interpret,
     is_true,
     log_vec_leaf_tensor,
@@ -32,13 +40,14 @@ from .monad import (
 from .training import convex, cross_entropy, neg_log, train_batched
 
 __all__ = [
+    "Monad",
     "Dist",
     "FiniteSupport",
     "Formula",
     "LogDefer",
     "LogLeaf",
     "LogReduced",
-    "LogVec",
+    "LogTens",
     "Method",
     "Report",
     "Uniform",
@@ -46,11 +55,12 @@ __all__ = [
     "average_reports",
     "big_vee",
     "big_wedge",
+    "ForAll",
+    "Exists",
     "convex",
     "cross_entropy",
-    "decode",
-    "encode",
-    "expectation",
+    "Bridge",
+    "DistLogVecBridge",
     "interpret",
     "is_true",
     "log_num_den",
