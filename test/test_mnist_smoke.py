@@ -9,7 +9,7 @@ import torch
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from examples import mnist_addition as ma  # noqa: E402
-from muller import train_batched  # noqa: E402
+from nesycat.torch import train_batched  # noqa: E402
 
 
 def _synthetic_data(n_pairs: int) -> ma.Data:

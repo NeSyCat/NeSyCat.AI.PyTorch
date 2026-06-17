@@ -4,13 +4,14 @@ training reading for the crisp ``bool`` truth object.
 ``big_wedge`` at ``LogTens`` interprets the batched per-element formula ONCE over the
 whole guard (the batch), marginalizes it in log space (:func:`log_num_den`), aggregates
 over the batch in LOG space (the mean = the product t-norm), and returns the aggregate
-as a :class:`~muller.monad.logtens.LogReduced` so the loss reads it back exactly.
+as a :class:`~nesycat.torch.monad.logtens.LogReduced` so the loss reads it back exactly.
 
 :func:`log_num_den` is the marginalization DISPATCH: try the additive-separability
 probe (:func:`conv_structure`, discovered by probing the reconstructor — sums, weighted
 sums, counts, iffs; NOT hardcoded to ``+``) and route through the log-space convolution
 (variable elimination, no joint); else fall back to the full-joint
-:func:`~muller.monad.logtens.marginalize` (the oracle). The probe verdict is cached per
+:func:`~nesycat.torch.monad.logtens.marginalize` (the oracle). The probe verdict is
+cached per
 ``(formula code, supports)`` — in eager PyTorch the probe would otherwise re-run every
 training step (in JAX it ran once at trace time).
 
@@ -148,8 +149,8 @@ def num_den_from_leaves(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The marginalization dispatch over already-materialized ``[B, k]`` leaves + the
     reconstructor: the convolution fast path (probe cached under ``cache_key``) else the
-    full-joint :func:`~muller.monad.logtens.marginalize_from` with the SHARED (uniform)
-    per-combo SAT mask.
+    full-joint :func:`~nesycat.torch.monad.logtens.marginalize_from` with the SHARED
+    (uniform) per-combo SAT mask.
 
     The mask is uniform across the batch because per-instance conditioning data enters as
     DATA in a leaf's support (e.g. WAP's observed ``(numbers, answer)`` leaf), bound by
@@ -205,7 +206,8 @@ def _big_wedge_logtens[A](guard: A, formula: Callable[[A], Formula[bool]]) -> Lo
     symbols carry the batch axis, so one neural forward each), marginalize in log space
     (:func:`log_num_den`), and MEAN the per-element log-masses over the batch (the product
     t-norm = the mean NLL). The aggregate is carried verbatim as a
-    :class:`~muller.monad.logtens.LogReduced` degree so the loss reads it back exactly;
+    :class:`~nesycat.torch.monad.logtens.LogReduced` degree so the loss reads it back
+    exactly;
     ``shared`` memoizes the Kleisli forwards across the interpreter's prefix-replays."""
     with shared():
         prog = interpret(LogTens, lambda: formula(guard))

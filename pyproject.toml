@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "muller"
+name = "nesycat-torch"
 version = "0.1.0"
-description = "Add your description here"
+description = "A PyTorch implementation of the NeSyCat Torch neurosymbolic framework."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["muller*"]
+include = ["nesycat*"]
 
 [dependency-groups]
 dev = [
@@ -48,7 +48,7 @@ module = ["pymc.*", "scipy.*", "numpy.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
-source = ["muller"]
+source = ["nesycat"]
 
 [tool.coverage.report]
 exclude_lines = [

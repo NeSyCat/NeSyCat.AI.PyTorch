@@ -5,7 +5,7 @@ supported, NON-normalized, log-space measures. The Kleisli BIND is the marginali
 realized by the evaluators below: :func:`log_convolve` (a discrete log-space convolution
 / variable elimination) on the fast path, :func:`marginalize` (the full joint) as the
 oracle/fallback. The do-notation is written with Python generators and turned into this
-AST by ``muller.monad.donotation.to_free``.
+AST by ``nesycat.torch.monad.donotation.to_free``.
 
   ``Pure x``                 -- a deterministic value (eta)
   ``Bind m k``               -- sequential composition (``k`` is a Python continuation)
@@ -257,7 +257,8 @@ def marginalize[A](
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The vectorized full-joint marginalization — KEPT as the correctness oracle and
     the fallback for predicates that are not an equality against an additive function
-    of the leaves (the convolution handles those; see ``muller.logic.tensor_bool``).
+    of the leaves (the convolution handles those; see
+    ``nesycat.torch.logic.tensor_bool``).
     Builds the joint ``[B, k_0, ..., k_{n-1}]`` and returns ``(log_num, log_den)`` via
     ``logsumexp``.
     """

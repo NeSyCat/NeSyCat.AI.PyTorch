@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F
 from torchvision.datasets import MNIST
 
-from muller import (
+from nesycat.torch import (
     Dist,
     Formula,
     LogDefer,
@@ -39,10 +39,10 @@ from muller import (
     run_average,
     train_batched,
 )
-from muller.dispatch import monad_method
-from muller.monad.bridge import Bridge, DistLogTensBridge
-from muller.monad.interpretation import Interpretation
-from muller.monad.logtens import map_leaf_weights
+from nesycat.torch.dispatch import monad_method
+from nesycat.torch.monad.bridge import Bridge, DistLogTensBridge
+from nesycat.torch.monad.interpretation import Interpretation
+from nesycat.torch.monad.logtens import map_leaf_weights
 
 # ---------------- the network: an ordinary torch nn ----------------
 #

@@ -26,7 +26,7 @@ from typing import Any
 
 import torch
 
-from muller import (
+from nesycat.torch import (
     Dist,
     DistLogTensBridge,
     Formula,
@@ -44,9 +44,9 @@ from muller import (
     run_average,
     train_batched,
 )
-from muller.dispatch import monad_method
-from muller.monad.dist import Pure
-from muller.monad.interpretation import Interpretation
+from nesycat.torch.dispatch import monad_method
+from nesycat.torch.monad.dist import Pure
+from nesycat.torch.monad.interpretation import Interpretation
 
 # The shared Example base lives in mnist_addition; import it whether this module is run as
 # a script (``python examples/binary.py`` -> sibling on the path) or as the

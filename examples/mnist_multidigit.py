@@ -28,7 +28,7 @@ import torch
 import torch.nn.functional as F
 from torchvision.datasets import MNIST
 
-from muller import (
+from nesycat.torch import (
     Dist,
     DistLogTensBridge,
     Formula,
@@ -44,8 +44,8 @@ from muller import (
     run_average,
     train_batched,
 )
-from muller.dispatch import monad_method
-from muller.monad.interpretation import Interpretation
+from nesycat.torch.dispatch import monad_method
+from nesycat.torch.monad.interpretation import Interpretation
 
 # The shared Example base lives in mnist_addition; import it whether this module is run as
 # a script (``python examples/mnist_multidigit.py`` -> sibling on the path) or as the

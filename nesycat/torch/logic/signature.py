@@ -6,9 +6,10 @@ type ``T`` — monad-free: the connectives read the same in every monad.
 The QUANTIFIERS (``big_wedge``/``big_vee``) are keyed on the monad, because the
 aggregation IS the Kleisli bind of the monad. Without higher-kinded types their
 generic signature is not expressible as an abstract method, so they are
-:class:`~muller.dispatch.Method`s with one instance per monad
-(``muller.logic.boolean`` for ``Dist``, ``muller.logic.tensor_bool`` for ``LogTens``),
-wrapped with precise ``@overload`` signatures in ``muller.logic``.
+:class:`~nesycat.torch.dispatch.Method`s with one instance per monad
+(``nesycat.torch.logic.boolean`` for ``Dist``, ``nesycat.torch.logic.tensor_bool``
+for ``LogTens``), wrapped with precise ``@overload`` signatures in
+``nesycat.torch.logic``.
 """
 
 from __future__ import annotations
@@ -47,7 +48,8 @@ class TwoMonBLat[T](ABC):
 
 # The quantifier methods: one instance per monad, resolved by the monad class. The
 # guard is Any here (the generic signature cannot be expressed without HKTs); the precise
-# per-monad signatures live on the @overload wrappers in ``muller.logic``. The guard shape
+# per-monad signatures live on the @overload wrappers in ``nesycat.torch.logic``. The
+# guard shape
 # differs per monad: an iterable of per-instance elements at Dist (folded), the batched
 # data itself at LogTens (the formula is read once over the whole batch).
 type QuantifierResult = Dist[bool] | LogTens[bool]

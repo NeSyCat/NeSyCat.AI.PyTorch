@@ -5,7 +5,7 @@ import math
 
 import torch
 
-from muller import (
+from nesycat.torch import (
     DistLogTensBridge,
     LogDefer,
     LogLeaf,
@@ -16,10 +16,10 @@ from muller import (
     log_vec_nll,
     log_vec_ptrue,
 )
-from muller.logic.tensor_bool import conv_structure
-from muller.monad.dist import FiniteSupport
-from muller.monad.donotation import Formula
-from muller.monad.logtens import collect_leaves, log_scatter, marginalize
+from nesycat.torch.logic.tensor_bool import conv_structure
+from nesycat.torch.monad.dist import FiniteSupport
+from nesycat.torch.monad.donotation import Formula
+from nesycat.torch.monad.logtens import collect_leaves, log_scatter, marginalize
 
 
 def _additive_program(

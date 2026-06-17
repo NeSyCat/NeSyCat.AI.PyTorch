@@ -19,7 +19,7 @@ each registered instance against ``Callable[P, R]`` (parameter drift between ins
 is a type error) and types calls as ``R``. What it cannot express is the per-call
 dependency of the result on the monad argument (``m -> m[A]`` needs a higher-kinded
 type variable, which Python lacks); that last step of precision comes from ``@overload``
-on a thin public wrapper (see ``muller.logic.big_wedge`` for the pattern).
+on a thin public wrapper (see ``nesycat.torch.logic.big_wedge`` for the pattern).
 
 Within a :func:`shared` context, method calls are memoized by argument identity — the
 eager analogue of Haskell's lazy sharing. This is load-bearing in eager PyTorch: the

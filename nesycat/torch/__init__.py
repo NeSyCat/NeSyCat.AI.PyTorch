@@ -1,4 +1,4 @@
-"""mULLER — a PyTorch implementation of the NeSyCat neurosymbolic framework.
+"""NeSyCat Torch — a PyTorch implementation of the NeSyCat neurosymbolic framework.
 
 A first-order formula is written ONCE as a Python generator (the monadic do-block),
 polymorphic over a monad ``m``, and read at two interpretations: ``Dist``

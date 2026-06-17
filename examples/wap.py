@@ -29,7 +29,7 @@ from typing import Any
 
 import torch
 
-from muller import (
+from nesycat.torch import (
     Formula,
     LogDefer,
     LogTens,

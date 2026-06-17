@@ -4,7 +4,7 @@ assign the same satisfaction probability."""
 import torch
 import torch.nn.functional as F
 
-from muller import (
+from nesycat.torch import (
     Dist,
     DistLogTensBridge,
     LogLeaf,
@@ -13,8 +13,8 @@ from muller import (
     is_true,
     log_vec_ptrue,
 )
-from muller.monad.dist import Pure
-from muller.monad.donotation import Formula
+from nesycat.torch.monad.dist import Pure
+from nesycat.torch.monad.donotation import Formula
 
 
 def _formula(element: tuple) -> Formula[bool]:  # type: ignore[type-arg]

@@ -1,10 +1,11 @@
-# mULLER: A Modular Categorical Semantics of the Neurosymbolic ULLER Framework via Monads
+# NeSyCat Torch: A Differentiable Tensor Implementation of Categorical Semantics for Neurosymbolic Learning
 
-mULLER is a Python implementation of the neurosymbolic framework described in "mULLER: A Modular Categorical Semantics of the Neurosymbolic ULLER Framework via Monads" by Daniel Romero Schellhorn and Till Mossakowski. This package provides a unified approach to neurosymbolic AI by using monads to model computational effects in first-order logic formulas, enabling modular integration of neural components with symbolic reasoning.
+NeSyCat Torch is a Python implementation of a neurosymbolic framework described in "NeSyCat Torch: A Differentiable Tensor Implementation of
+Categorical Semantics for Neurosymbolic Learning". This package provides a unified approach to neurosymbolic AI by using monads to model computational effects in first-order logic formulas, enabling modular integration of neural components with symbolic reasoning.
 
 ## Overview
 
-mULLER extends the ULLER (Unified Language for LEarning and Reasoning) framework with a categorical semantics based on monads. This allows for:
+NeSyCat Torch extends the ULLER (Unified Language for LEarning and Reasoning) framework with a categorical semantics based on monads. This allows for:
 
 - **Modular semantics**: Different logics (classical, probabilistic, fuzzy, non-deterministic) as instances of one framework
 - **Neural integration**: Support for computational function and predicate symbols that can be realized by neural networks
@@ -23,14 +24,14 @@ The framework supports formulas of the form `x := m(T₁, ..., Tₙ)(F)` where `
 ### Install from source
 
 ```bash
-git clone https://github.com/cherryfunk/mULLER.git
-cd mULLER
+git clone <repository-url>
+cd nesycat-torch
 uv pip install -e .
 ```
 
-### Install from GitHub
+### Install from a repository
 ```bash
-uv pip install git+https://github.com/cherryfunk/mULLER.git
+uv pip install git+<repository-url>
 ```
 
 ### Dependencies
@@ -55,7 +56,7 @@ More examples can be found in the `examples/` directory.
 #### Basic Probabilistic Example
 
 ```python
-from muller import List, Prob, nesy, parse, uniform
+from nesycat.torch import List, Prob, nesy, parse, uniform
 
 # Create a probabilistic NeSy framework with Prob monad, bool truth values, and List structure
 prob_framework = nesy(Prob, bool, List, int)
@@ -96,8 +97,8 @@ print(f"Probability of rolling an even 6: {result.value[True]}")  # 1/6 ≈ 0.16
 #### Non-Deterministic Example
 
 ```python
-from muller import List, NonEmptyPowerset, nesy, parse, from_list, singleton
-from muller.logics import Priest
+from nesycat.torch import List, NonEmptyPowerset, nesy, parse, from_list, singleton
+from nesycat.torch.logics import Priest
 
 # Create a non-deterministic NeSy framework with Priest logic
 nondet_framework = nesy(NonEmptyPowerset, Priest, List, str)
@@ -128,7 +129,7 @@ print(f"Possible truth values: {result.value}")  # frozenset({Priest.Both, Pries
 
 ```python
 from typing import Literal, get_args
-from muller import List, Prob, nesy, parse, weighted
+from nesycat.torch import List, Prob, nesy, parse, weighted
 
 Universe = Literal["red", "green", "yellow", True, False]
 universe: list[Universe] = list(get_args(Universe))
@@ -223,8 +224,8 @@ Creates a NeSy framework instance directly from a logic instance.
 
 Example:
 ```python
-from muller import nesy, Prob, List
-from muller.logics import Aggr2SGrpBLat
+from nesycat.torch import nesy, Prob, List
+from nesycat.torch.logics import Aggr2SGrpBLat
 
 class MyCustomLogic(Aggr2SGrpBLat[Prob, bool, List, int]):
     ...
@@ -277,7 +278,7 @@ Transformation that converts probabilistic interpretations to non-deterministic 
 
 **Usage:**
 ```python
-from muller.transformation import argmax
+from nesycat.torch.transformation import argmax
 nondet_interpretation = prob_interpretation.transform(argmax())
 ```
 
@@ -314,8 +315,8 @@ You can define custom monads by implementing the `Container1` interface from `re
 
 ```python
 from returns.interfaces.container import Container1
-from muller.logics import Aggr2SGrpBLat
-from muller import NeSyFramework
+from nesycat.torch.logics import Aggr2SGrpBLat
+from nesycat.torch import NeSyFramework
 
 class MyCustomMonad[T](Container1[T]):
     def __init__(self, value: T):
@@ -343,19 +344,19 @@ class MyCustomLogic(Aggr2SGrpBLat[MyCustomMonad, bool, list, int]):
     
     # Implement other required methods...
 
-# Use with mULLER
+# Use with NeSyCat Torch
 logic = MyCustomLogic()
 custom_framework = NeSyFramework.from_logic(logic)
 ```
 
 ### Transformations
 
-mULLER supports systematic transformations between semantic frameworks, converting interpretations from one monad to another.
+NeSyCat Torch supports systematic transformations between semantic frameworks, converting interpretations from one monad to another.
 
 #### Using Built-in Transformations
 
 ```python
-from muller.transformation import argmax
+from nesycat.torch.transformation import argmax
 
 # Apply argmax to convert probabilistic to non-deterministic
 prob_interpretation = Interpretation(...)  # Your probabilistic interpretation
@@ -369,7 +370,7 @@ The `argmax` transformation selects values with maximum probability, handling ti
 Create custom transformations by inheriting from `NeSyTransformer`:
 
 ```python
-from muller.nesy_framework import NeSyTransformer, Interpretation
+from nesycat.torch.nesy_framework import NeSyTransformer, Interpretation
 
 class MyTransformer[A, B, C](NeSyTransformer[A, B, C]):
     def __call__(self, interpretation: Interpretation[A, B]) -> Interpretation[A, C]:
@@ -421,17 +422,14 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 
 ## Citation
 
-If you use mULLER in your research, please cite:
+If you use NeSyCat Torch in your research, please cite:
 
 ```bibtex
-@inproceedings{schellhorn2025muller,
-  title={mULLER: A Modular Categorical Semantics of the Neurosymbolic ULLER Framework via Monads},
-  author={Schellhorn, Daniel Romero and Mossakowski, Till},
-  booktitle={Proceedings of Machine Learning Research},
-  volume={284},
-  pages={1--28},
-  year={2025},
-  organization={19th Conference on Neurosymbolic Learning and Reasoning}
+@misc{nesycattorch,
+  title={NeSyCat Torch: A Differentiable Tensor Implementation of
+Categorical Semantics for Neurosymbolic Learning},
+  author={Author names withheld},
+  note={Under Review for NeSy 2026}
 }
 ```
 
@@ -440,3 +438,5 @@ If you use mULLER in your research, please cite:
 - Original ULLER framework: [Van Krieken et al., 2024](https://doi.org/10.1007/978-3-031-71167-1_12)
 - Computational monads: [Moggi, 1991](https://doi.org/10.1016/0890-5401(91)90052-4)
 - Logic Tensor Networks: [Badreddine et al., 2022](https://doi.org/10.1016/j.artint.2021.103649)
+- NeSyCat [Schellhorn and Mossakowski, 2026]( https:
+//arxiv.org/abs/2604.24612)

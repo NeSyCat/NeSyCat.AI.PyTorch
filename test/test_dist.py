@@ -1,7 +1,7 @@
 """The Dist monad: expectation (the law of total probability) + the do-notation."""
 
-from muller import Dist, FiniteSupport, Uniform, interpret, is_true
-from muller.monad.dist import Bind, Pure
+from nesycat.torch import Dist, FiniteSupport, Uniform, interpret, is_true
+from nesycat.torch.monad.dist import Bind, Pure
 
 
 def test_expectation_pure() -> None:

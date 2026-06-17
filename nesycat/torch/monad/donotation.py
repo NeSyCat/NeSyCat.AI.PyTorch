@@ -10,8 +10,8 @@ over the monad ``m`` (the Haskell ``@m``)::
         return s == d1 + d2
 
 :func:`interpret` turns the generator into the free-monad AST of ``m`` (using m's
-``pure``/``bind`` constructors). The quantifiers (``muller.logic``) and the
-marginalization (``muller.monad.logtens``) consume the AST. The monad is EXPLICIT
+``pure``/``bind`` constructors). The quantifiers (``nesycat.torch.logic``) and the
+marginalization (``nesycat.torch.monad.logtens``) consume the AST. The monad is EXPLICIT
 (``m``, the monad class), never inferred.
 """
 

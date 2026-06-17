@@ -2,8 +2,8 @@ from abc import ABC
 
 import torch
 
-from muller.dispatch import Method, monad_method
-from muller.monad.monad import Monad
+from nesycat.torch.dispatch import Method, monad_method
+from nesycat.torch.monad.monad import Monad
 
 
 class Interpretation[M: Monad](ABC):
