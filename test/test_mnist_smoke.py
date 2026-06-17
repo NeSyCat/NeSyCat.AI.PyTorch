@@ -25,12 +25,12 @@ def _synthetic_data(n_pairs: int) -> ma.Data:
 
 def _objective(example: ma.MNistAddition):  # type: ignore[no-untyped-def]
     """Adapt the OO ``Example.objective`` to the ``(model, batch)`` training contract."""
-    return lambda model, batch: example.objective({ma.MNistAddition.digit: model}, batch)
+    return lambda model, batch: example.objective(batch)
 
 
 def test_loss_decreases_on_tiny_dataset() -> None:
     data = _synthetic_data(ma.BATCH)  # exactly one batch per epoch
-    model = ma.init_params(torch.Generator().manual_seed(0))
+    model = ma.init_model(torch.Generator().manual_seed(0))
     objective = _objective(ma._build(model))
     batch0 = next(ma.batches(0, data))
     with torch.no_grad():
@@ -45,7 +45,7 @@ def test_loss_decreases_on_tiny_dataset() -> None:
 
 def test_report_shape() -> None:
     data = _synthetic_data(8)
-    model = ma.init_params(torch.Generator().manual_seed(0))
+    model = ma.init_model(torch.Generator().manual_seed(0))
     rep = ma.report(model, data)
     labels = [label for label, _ in rep.metrics]
     assert labels == ["Sum-acc(train)", "Sum-acc(test)", "Digit-acc"]

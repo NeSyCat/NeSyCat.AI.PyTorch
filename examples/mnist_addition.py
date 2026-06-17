@@ -75,11 +75,14 @@ class MnistCNN(torch.nn.Module):
 # ---------------- domain: the neural Kleisli symbol ----------------
 
 
-def init_params(generator: torch.Generator | None = None) -> MnistCNN:
-    """A fresh model — a new CNN. Seed init via the global RNG for reproducibility."""
-    if generator is not None:
+def init_model(generator: torch.Generator | None = None) -> MnistCNN:
+    """A fresh model — a new CNN. Construction is scoped to the given generator's seed via
+    ``fork_rng``, so seeding for reproducibility does NOT perturb the global RNG."""
+    if generator is None:
+        return MnistCNN()
+    with torch.random.fork_rng():
         torch.manual_seed(generator.initial_seed())
-    return MnistCNN()
+        return MnistCNN()
 
 
 # ---------------- grammar: the formula and the sentence ----------------
@@ -93,6 +96,14 @@ class Example[M1: Monad, M2: Monad, I1: Interpretation, I2: Interpretation](
 ):
     """Require I1: Interpretation[M1], I2: Interpretation[M2]"""
 
+    # NOTE: reference_interpretation is currently unused at runtime. The Dist-typed
+    # reading is never consulted on the hot path: digit_dist does not read
+    # self.tensor_interpretation in its Dist branch (only the LogTens branch does), and
+    # report/sentence only ever use the LogTens-typed interpretation. This mirrors
+    # Haskell, whose Dist-typed axiom (mnistAxiomData, D_Grammatical/Interpretation.hs) is
+    # explicitly commented "Not called at runtime" and whose mnistReport only uses the
+    # LogTens-typed reading. It is kept here deliberately for parity/documentation, not
+    # deleted.
     reference_interpretation: I1
     tensor_interpretation: I2
 
@@ -101,9 +112,7 @@ class Example[M1: Monad, M2: Monad, I1: Interpretation, I2: Interpretation](
         self.tensor_interpretation = tensor_interpretation
 
     @abstractmethod
-    def objective(
-        self, models: dict[monad_method, torch.nn.Module], batch: Batch
-    ) -> torch.Tensor: ...
+    def objective(self, batch: Batch) -> torch.Tensor: ...
 
 
 class MNistAdditionInterpretationDist(Interpretation[Dist[Any]]):
@@ -148,12 +157,11 @@ class MNistAddition(
         fold."""
         return big_wedge(LogTens, batch, lambda g: self.formula(LogTens, *g))
 
-    def objective(
-        self, models: dict[monad_method, torch.nn.Module], batch: Batch
-    ) -> torch.Tensor:
+    def objective(self, batch: Batch) -> torch.Tensor:
         """The generic objective ``lossKnow . sat``: the knowledge loss (neg-log
-        satisfaction) of the sentence's LogTens reading over the batch."""
-        self.tensor_interpretation.models = models
+        satisfaction) of the sentence's LogTens reading over the batch. The model is the
+        same object the optimizer steps in place (wired in at ``_build`` time and read
+        fresh by ``digit_logtens``), so it need not be re-injected per step."""
         return neg_log(self.sentence(batch))
 
 
@@ -221,17 +229,13 @@ def _pairs(
     return x, y, xl, yl
 
 
-# the Dist <-> LogTens bridge (the encode / enc_dist / decode methods live here).
-_BRIDGE = DistLogTensBridge()
-
-
 def _encode_obs(sums: list[int]) -> LogTens[int]:
     """``eta n`` — the observed sums, already in the distributional format: ONE batched
     ``LogTens`` leaf over ``[0..MAX_SUM]``, a one-hot ``[B, MAX_SUM+1]`` probability tensor
     embedded (via the bridge's batched ``encode``) as log-weights. Built ONCE; ``batches``
     slices it, the formula binds it (``s := n``). Mirrors the Haskell ``encode``."""
     onehot = F.one_hot(torch.tensor(sums), MAX_SUM + 1).float()  # [B, MAX_SUM+1]
-    return _BRIDGE.encode(list(range(MAX_SUM + 1)), onehot)
+    return DistLogTensBridge.encode(list(range(MAX_SUM + 1)), onehot)
 
 
 def load_data(root: str = "examples/data") -> Data:
@@ -340,7 +344,7 @@ def main() -> None:
 
     def one_run() -> Report:
         gen = torch.Generator().manual_seed(args.seed + next(run_idx))
-        model = init_params(gen)  # stepped in place; the example holds this same module
+        model = init_model(gen)  # stepped in place; the example holds this same module
 
         example = _build(model)
         train_batched(
@@ -350,7 +354,7 @@ def main() -> None:
             LR,
             lambda e, d: list(batches(e, d)),
             data,
-            lambda model, b: example.objective({MNistAddition.digit: model}, b),
+            lambda _model, b: example.objective(b),
         )
         return report(model, data)
 
