@@ -129,7 +129,6 @@ class MNistAddition(
     ],
     DistLogTensBridge,
 ):
-
     @monad_method
     def digit(self, img: Monad[Image]) -> Monad[int]: ...
 
@@ -151,7 +150,7 @@ class MNistAddition(
         return s == d1 + d2
 
     def sentence(self, batch: Batch) -> LogTens[bool]:
-        """bigWedge (x, y, n) in data.  formula — at LogTens the guard IS the batched data,
+        """bigWedge (x, y, n) in data.  formula — at LogTens the guard IS the batch data,
         so the shared (batched) quantifier reads the formula ONCE over it, marginalizes,
         and MEANs the log-masses over the batch (the product t-norm). NOT a per-instance
         fold."""
@@ -231,8 +230,8 @@ def _pairs(
 
 def _encode_obs(sums: list[int]) -> LogTens[int]:
     """``eta n`` — the observed sums, already in the distributional format: ONE batched
-    ``LogTens`` leaf over ``[0..MAX_SUM]``, a one-hot ``[B, MAX_SUM+1]`` probability tensor
-    embedded (via the bridge's batched ``encode``) as log-weights. Built ONCE; ``batches``
+    ``LogTens`` leaf over ``[0..MAX_SUM]``, a one-hot ``[B, MAX_SUM+1]`` prob tensor
+    embedded (via the bridge's batched ``encode``) as log-weights. Built ONCE; ``batch``
     slices it, the formula binds it (``s := n``). Mirrors the Haskell ``encode``."""
     onehot = F.one_hot(torch.tensor(sums), MAX_SUM + 1).float()  # [B, MAX_SUM+1]
     return DistLogTensBridge.encode(list(range(MAX_SUM + 1)), onehot)

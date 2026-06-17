@@ -22,7 +22,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, overload
+from typing import Any
 
 import torch
 
@@ -32,19 +32,29 @@ from muller import (
     Formula,
     LogDefer,
     LogTens,
-    Method,
+    Monad,
     Report,
     accuracy,
     big_wedge,
+    confidence,
+    f1_score,
     is_true,
     neg_log,
+    precision,
     run_average,
     train_batched,
 )
+from muller.dispatch import monad_method
 from muller.monad.dist import Pure
+from muller.monad.interpretation import Interpretation
 
-# the Dist <-> LogTens bridge (the encode / enc_dist / decode methods live here).
-_BRIDGE = DistLogTensBridge()
+# The shared Example base lives in mnist_addition; import it whether this module is run as
+# a script (``python examples/binary.py`` -> sibling on the path) or as the
+# ``examples.binary`` package module (tests).
+try:
+    from examples.mnist_addition import Example
+except ImportError:  # pragma: no cover - script-run fallback
+    from mnist_addition import Example
 
 # ---------------- the network: an ordinary torch nn ----------------
 #
@@ -81,80 +91,91 @@ def inside(pt: torch.Tensor) -> torch.Tensor:
     return (d * d).sum(dim=-1) < RADIUS_SQ
 
 
-# class BinaryKlRel m where classifierA :: MLP -> Point -> m Bool
-_classifier = Method[[MLP, torch.Tensor], LogTens[bool] | Dist[bool]]("classifierA")
+type Point = torch.Tensor  # a (batch of) point(s) [., 2]
 
 
-@_classifier.instance(LogTens)  # instance BinaryKlRel LogTens where
-def _classifier_logtens(model: MLP, pts: torch.Tensor) -> LogTens[bool]:
-    # record the (batched) points and DEFER the forward — the whole batch is one leaf, so
-    # the MLP runs exactly ONCE at marginalization.
-    return LogDefer([True, False], pts, model)
+class BinaryInterpretationDist(Interpretation[Dist[Any]]):
+    pass
 
 
-@_classifier.instance(Dist)  # instance BinaryKlRel Dist where
-def _classifier_dist(model: MLP, pt: torch.Tensor) -> Dist[bool]:
-    # the Dist reading IS decode of the (resolved) logit leaf; give the MLP a batch axis.
-    return _BRIDGE.decode(classifier(LogTens, model, pt.reshape(1, 2)))
+class BinaryInterpretationLogTens(Interpretation[LogTens[Any]]):
+    pass
 
 
-@overload
-def classifier(m: type[LogTens[Any]], model: MLP, pt: torch.Tensor) -> LogTens[bool]: ...
-@overload
-def classifier(m: type[Dist[Any]], model: MLP, pt: torch.Tensor) -> Dist[bool]: ...
-def classifier(m: type, model: MLP, pt: torch.Tensor) -> Any:
-    return _classifier(m, model, pt)
+class Binary(
+    Example[Dist, LogTens, BinaryInterpretationDist, BinaryInterpretationLogTens],
+    DistLogTensBridge,
+):
+    """The two monad-dispatched symbols: the learned MLP ``classifier`` and the
+    ground-truth ``label`` (a CERTAIN value, no weights), both ``Point -> m Bool``."""
+
+    @monad_method
+    def classifier(self, pts: Point) -> Monad[bool]: ...
+
+    @classifier.instance(LogTens)
+    def classifier_logtens(self, pts: Point) -> LogTens[bool]:
+        # record the (batched) points and DEFER the forward — the whole batch is one leaf,
+        # so the MLP runs exactly ONCE at marginalization.
+        model = self.tensor_interpretation.models[type(self).classifier]
+        return LogDefer([True, False], pts, model)
+
+    @classifier.instance(Dist)
+    def classifier_dist(self, pts: Point) -> Dist[bool]:
+        # the Dist reading IS decode of the (resolved) logit leaf; give the MLP a batch.
+        return self.decode(self.classifier(LogTens, pts.reshape(1, 2)))
+
+    @monad_method
+    def label(self, pts: Point) -> Monad[bool]: ...
+
+    @label.instance(LogTens)
+    def label_logtens(self, pts: Point) -> LogTens[bool]:
+        # the label as a batched CERTAIN distribution: a one-hot delta per point (encode =
+        # the batched eta), the LogTens analogue of MNIST's observed sum — whole batch.
+        f = inside(pts).float()  # [B] membership per point
+        one_hot = torch.stack([f, 1.0 - f], dim=1)  # [B, 2] over {True, False}
+        return self.encode([True, False], one_hot)
+
+    @label.instance(Dist)
+    def label_dist(self, pts: Point) -> Dist[bool]:
+        return Pure(bool(inside(pts).item()))  # a certain distribution on the true label
+
+    def formula(self, m: type, pts: Point) -> Formula[bool]:
+        """label(pt) <-> classifier(pt) — written ONCE over the WHOLE batch of points.
+        ``classifier`` is the latent leaf; ``label`` (the observation) is bound LAST, so
+        the iff is read as the separable equality ``label == pred`` the convolution
+        recognizes."""
+        pred = yield self.classifier(m, pts)
+        lab = yield self.label(m, pts)
+        return bool(lab == pred)
+
+    def sentence(self, batch: Batch) -> LogTens[bool]:
+        """bigWedge pt in data.  formula — at LogTens the guard IS the batched points
+        tensor, read once over the whole batch."""
+        return big_wedge(LogTens, batch, lambda pts: self.formula(LogTens, pts))
+
+    def objective(self, batch: Batch) -> torch.Tensor:
+        """The generic objective: the knowledge loss of the sentence's LogTens reading."""
+        return neg_log(self.sentence(batch))
 
 
-# class BinaryRel m where labelA :: Point -> m Bool
-_label = Method[[torch.Tensor], LogTens[bool] | Dist[bool]]("labelA")
+def _build(model: MLP) -> Binary:
+    """Assemble the example for a model: wire the MLP into both interpretations (keyed by
+    the ``classifier`` symbol). ``label`` carries no weights, so it is not in the dict."""
+    models: dict[monad_method, torch.nn.Module] = {Binary.classifier: model}
+    return Binary(
+        BinaryInterpretationDist(models, Dist),
+        BinaryInterpretationLogTens(models, LogTens),
+    )
 
 
-@_label.instance(LogTens)  # instance BinaryRel LogTens where
-def _label_logtens(pts: torch.Tensor) -> LogTens[bool]:
-    # the label as a batched CERTAIN distribution: a one-hot delta per point (encode = the
-    # batched eta), the LogTens analogue of MNIST's observed sum — over the WHOLE batch.
-    f = inside(pts).float()  # [B] membership per point
-    one_hot = torch.stack([f, 1.0 - f], dim=1)  # [B, 2] over {True, False}
-    return _BRIDGE.encode([True, False], one_hot)
-
-
-@_label.instance(Dist)  # instance BinaryRel Dist where
-def _label_dist(pt: torch.Tensor) -> Dist[bool]:
-    return Pure(bool(inside(pt).item()))  # a certain distribution on the true label
-
-
-@overload
-def label(m: type[LogTens[Any]], pt: torch.Tensor) -> LogTens[bool]: ...
-@overload
-def label(m: type[Dist[Any]], pt: torch.Tensor) -> Dist[bool]: ...
-def label(m: type, pt: torch.Tensor) -> Any:
-    return _label(m, pt)
-
-
-def init_params(generator: torch.Generator | None = None) -> MLP:
-    """A fresh model — a new MLP. Seed init via the global RNG for reproducibility."""
-    if generator is not None:
+def init_model(generator: torch.Generator | None = None) -> MLP:
+    """A fresh model — a new MLP. Construction is scoped to the given generator's seed via
+    ``fork_rng``, so seeding for reproducibility does NOT perturb the global RNG."""
+    if generator is None:
+        return MLP()
+    with torch.random.fork_rng():
         torch.manual_seed(generator.initial_seed())
-    return MLP()
-
-
-# ---------------- grammar: the formula and the sentence ----------------
-
-
-def formula(m: type, model: MLP, pts: torch.Tensor) -> Formula[bool]:
-    """label(pt) <-> classifier(pt) — written ONCE over the WHOLE batch of points.
-    ``classifier`` is the latent leaf; ``label`` (the observation) is bound LAST, so the
-    iff is read as the separable equality ``label == pred`` the convolution recognizes."""
-    pred = yield classifier(m, model, pts)
-    lab = yield label(m, pts)
-    return bool(lab == pred)
-
-
-def sentence(m: type, model: MLP, batch: Batch) -> Any:
-    """bigWedge pt in data.  formula — at LogTens the guard IS the batched points tensor,
-    read once over the whole batch."""
-    return big_wedge(m, batch, lambda pts: formula(m, model, pts))
+        return MLP()
 
 
 # ---------------- data: random points in the unit square ----------------
@@ -192,26 +213,37 @@ def batches(epoch: int, data: Data) -> Iterator[Batch]:
 # ---------------- inference + benchmark ----------------
 
 
-def objective(model: MLP, batch: Batch) -> torch.Tensor:
-    """The generic objective: the knowledge loss of the sentence's LogTens reading."""
-    return neg_log(sentence(LogTens, model, batch))
-
-
-def _split_accuracy(model: MLP, points: torch.Tensor) -> float:
-    preds = [is_true(classifier(Dist, model, p)) > 0.5 for p in points]
-    labels = [bool(inside(p).item()) for p in points]
-    return accuracy(preds, labels)
+def _pairs(example: Binary, points: torch.Tensor) -> list[tuple[float, bool]]:
+    """``(prob, label)`` per point: ``prob = P(True | classifier@Dist)``, ``label`` the
+    ground-truth circle membership (mirrors the Haskell ``evaluate predict label``)."""
+    return [
+        (is_true(example.classifier(Dist, p)), bool(inside(p).item())) for p in points
+    ]
 
 
 def report(model: MLP, data: Data) -> Report:
-    """Benchmark-time inference (NO training): the classifier vs the circle test."""
+    """Benchmark-time inference (NO training): the standard binary-classification metrics
+    (mirroring the Haskell ``runMetrics``) — train/test accuracy plus F1, precision and
+    the +/- confidences over the test split."""
+    example = _build(model)
     with torch.no_grad():
-        return Report(
-            [
-                ("Train-acc", _split_accuracy(model, data.train)),
-                ("Test-acc", _split_accuracy(model, data.test)),
-            ]
-        )
+        train_pairs = _pairs(example, data.train)
+        test_pairs = _pairs(example, data.test)
+    conf_pos, conf_neg = confidence(test_pairs)
+
+    def acc(pairs: list[tuple[float, bool]]) -> float:
+        return accuracy([prob > 0.5 for prob, _ in pairs], [lab for _, lab in pairs])
+
+    return Report(
+        [
+            ("Acc(train)", acc(train_pairs)),
+            ("Acc(test)", acc(test_pairs)),
+            ("F1", f1_score(test_pairs)),
+            ("Precision", precision(test_pairs)),
+            ("Conf+", conf_pos),
+            ("Conf-", conf_neg),
+        ]
+    )
 
 
 def main() -> None:
@@ -231,14 +263,17 @@ def main() -> None:
 
     def one_run() -> Report:
         gen = torch.Generator().manual_seed(args.seed + next(run_idx))
-        model = train_batched(
+        model = init_model(gen)  # stepped in place; the example holds this same module
+
+        example = _build(model)
+        train_batched(
             args.n == 1,
-            init_params(gen),
+            model,
             EPOCHS,
             LR,
             lambda e, d: list(batches(e, d)),
             data,
-            objective,
+            lambda _model, b: example.objective(b),
         )
         return report(model, data)
 

@@ -28,7 +28,6 @@ import torch
 import torch.nn.functional as F
 from torchvision.datasets import MNIST
 
-from examples.mnist_addition import Example
 from muller import (
     Dist,
     DistLogTensBridge,
@@ -47,6 +46,14 @@ from muller import (
 )
 from muller.dispatch import monad_method
 from muller.monad.interpretation import Interpretation
+
+# The shared Example base lives in mnist_addition; import it whether this module is run as
+# a script (``python examples/mnist_multidigit.py`` -> sibling on the path) or as the
+# ``examples.mnist_multidigit`` package module (tests).
+try:
+    from examples.mnist_addition import Example
+except ImportError:  # pragma: no cover - script-run fallback
+    from mnist_addition import Example
 
 # ---------------- the network: an ordinary torch nn ----------------
 #

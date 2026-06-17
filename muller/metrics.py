@@ -123,6 +123,4 @@ def run_average(title: str, n: int, experiment: Callable[[], Report]) -> None:
         line = "  ".join(f"{label}={value:.4f}" for label, value in rep.metrics)
         print(f"  Run {i:2d}:  {line}")
         reports.append(rep)
-    print_summary(
-        f"{title} - mean +/- std over {n} runs", summarize_reports(reports)
-    )
+    print_summary(f"{title} - mean +/- std over {n} runs", summarize_reports(reports))

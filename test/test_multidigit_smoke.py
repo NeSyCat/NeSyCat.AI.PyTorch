@@ -15,9 +15,7 @@ from muller import train_batched  # noqa: E402
 def _synthetic_data(n_quads: int) -> md.Data:
     g = torch.Generator().manual_seed(123)
     groups = tuple(torch.rand(n_quads, 1, 28, 28, generator=g) for _ in range(4))
-    labs = tuple(
-        torch.randint(0, 10, (n_quads,), generator=g).tolist() for _ in range(4)
-    )
+    labs = tuple(torch.randint(0, 10, (n_quads,), generator=g).tolist() for _ in range(4))
     l1, l2, l3, l4 = labs
     sums = [md.number(a, b) + md.number(c, d) for a, b, c, d in zip(l1, l2, l3, l4)]
     train_batch = (*groups, md._encode_obs(sums))

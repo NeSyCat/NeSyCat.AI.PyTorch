@@ -16,8 +16,6 @@ from muller import (
 from muller.monad.dist import Pure
 from muller.monad.donotation import Formula
 
-_bridge = DistLogTensBridge()
-
 
 def _formula(element: tuple) -> Formula[bool]:  # type: ignore[type-arg]
     """n = d1 + d2, written once — reads at Dist and LogTens unchanged."""
@@ -34,17 +32,23 @@ def test_dist_and_logtens_readings_agree() -> None:
     logits2 = torch.randn(10, generator=g)
     observed_sum = 9
 
-    # LogTens reading: BATCHED leaves ([B, k], here B = 1); the guard IS the batched tuple.
+    # LogTens reading: BATCHED leaves ([B, k], here B = 1); the guard IS the batch tuple.
     leaf1: LogTens[int] = LogLeaf(list(range(10)), logits1.unsqueeze(0))
     leaf2: LogTens[int] = LogLeaf(list(range(10)), logits2.unsqueeze(0))
     one_hot = F.one_hot(torch.tensor(observed_sum), 19).float().unsqueeze(0)  # [1, 19]
-    obs = _bridge.encode(list(range(19)), one_hot)
+    obs = DistLogTensBridge.encode(list(range(19)), one_hot)
     sat = big_wedge(LogTens, (leaf1, leaf2, obs), _formula)
     p_logtens = float(log_vec_ptrue(sat))
 
     # Dist reading: softmax readouts (decode takes the leaf's first row) + the certain
     # observation (eta n). Dist's guard stays a COLLECTION of one instance.
-    guard = [(_bridge.decode(leaf1), _bridge.decode(leaf2), Pure(observed_sum))]
+    guard = [
+        (
+            DistLogTensBridge.decode(leaf1),
+            DistLogTensBridge.decode(leaf2),
+            Pure(observed_sum),
+        )
+    ]
     p_dist = is_true(big_wedge(Dist, guard, _formula))
 
     assert abs(p_logtens - p_dist) < 1e-5

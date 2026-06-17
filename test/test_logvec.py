@@ -21,8 +21,6 @@ from muller.monad.dist import FiniteSupport
 from muller.monad.donotation import Formula
 from muller.monad.logtens import collect_leaves, log_scatter, marginalize
 
-_bridge = DistLogTensBridge()
-
 
 def _additive_program(
     leaf1: LogTens[int], leaf2: LogTens[int], obs: LogTens[int]
@@ -103,7 +101,7 @@ def test_fallback_on_non_additive_predicate() -> None:
 
 def test_decode_encode_roundtrip() -> None:
     probs = torch.tensor([[0.1, 0.2, 0.3, 0.4]])
-    d = _bridge.decode(_bridge.encode([0, 1, 2, 3], probs))
+    d = DistLogTensBridge.decode(DistLogTensBridge.encode([0, 1, 2, 3], probs))
     assert isinstance(d, FiniteSupport)
     for (x, p), expected in zip(d.support, [0.1, 0.2, 0.3, 0.4]):
         assert abs(p - expected) < 1e-6
@@ -201,9 +199,7 @@ def test_non_separable_with_observation_leaf() -> None:
     nums, dens = [], []
     for j in range(b):
         joint = (
-            w1[j].reshape(k1, 1, 1)
-            + w2[j].reshape(1, k2, 1)
-            + obs_w[j].reshape(1, 1, k1)
+            w1[j].reshape(k1, 1, 1) + w2[j].reshape(1, k2, 1) + obs_w[j].reshape(1, 1, k1)
         ).reshape(-1)
         mask = torch.tensor(
             [
