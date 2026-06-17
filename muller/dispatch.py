@@ -42,73 +42,11 @@ _shared: contextvars.ContextVar[_Cache | None] = contextvars.ContextVar(
 )
 
 
-class monad_method[**P, R]:
-    def __init__(self, fn: Callable[P, R]) -> None:
-        self.fn = fn
-        self.owner: type | None = None
-        self._instances: dict[type, Callable[P, R]] = {}
-
-    def __set_name__(self, owner: type, name: str) -> None:
-        self.owner = owner
-        self.name = name
-
-    def __get__(self, obj: Any, objtype: type | None = None) -> Any:
-        """Support both bound (instance.digit(...)) and unbound calls."""
-        if obj is None:
-            return self
-        # Return a bound version that fills in `self` (the instance)
-        import functools
-        return functools.partial(self._dispatch, obj)
-
-    def _dispatch(self, slf: Any, monad: type, *args: Any, **kwargs: Any) -> R:
-        impl = self._instances.get(monad)
-        if impl is None:
-            owner_name = self.owner.__name__ if self.owner else "<?>"
-            raise TypeError(
-                f"no instance of {owner_name}.{self.fn.__name__!r} "
-                f"for monad {monad.__name__!r} "
-                "(register one with .instance)"
-            )
-
-        cache = _shared.get()
-        if cache is None:
-            return impl(slf, *args, **kwargs)
-
-        key = (
-            (self.owner.__name__ if self.owner else "") + "." + self.fn.__name__,
-            monad,
-            id(slf),
-            *(id(a) for a in args),
-            *((k, id(v)) for k, v in sorted(kwargs.items())),
-        )
-        if key not in cache:
-            cache[key] = (args, kwargs, impl(slf, *args, **kwargs))
-        return cast(R, cache[key][2])
-
-    def instance(self, monad: type) -> Callable[[Callable[P, R]], Callable[P, R]]:
-        """
-        Decorator: declare the implementation of this method for `monad`.
-
-            @digit.instance(LogTens)
-            def digit_logtens(self, model, img): ...
-        """
-        def register(fn: Callable[P, R]) -> Callable[P, R]:
-            self._instances[monad] = fn
-            return fn
-        return register
-
-    def __call__(self, *args: Any, **kwargs: Any) -> R:
-        # Called unbound (e.g. from inside __set_name__ or class body)
-        # or when __get__ hasn't been invoked.
-        return self._dispatch(*args, **kwargs)
-
-
-class Method[**P, R]:
-    """A type-class method: one instance per monad class, dispatched at call time.
-
-    ``P`` = the instance parameter list (without the monad), ``R`` = the union of the
-    per-monad result types.
-    """
+class _DispatchTable[**P, R]:
+    """The shared dispatch machinery behind :class:`Method` and :class:`monad_method`: a
+    registry of one implementation per monad class (``instance``), resolution by the monad
+    class (``_resolve``), and the ``shared``-context memoization (``_call_cached``). The
+    two public faces differ only in how a call is keyed — see each subclass."""
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -116,7 +54,11 @@ class Method[**P, R]:
 
     def instance(self, monad: type) -> Callable[[Callable[P, R]], Callable[P, R]]:
         """Declare the instance of this method for ``monad`` (a Haskell ``instance``
-        clause), as a decorator over a named def."""
+        clause), as a decorator over a named def::
+
+            @digit.instance(LogTens)
+            def digit_logtens(self, img): ...
+        """
 
         def register(fn: Callable[P, R]) -> Callable[P, R]:
             self._instances[monad] = fn
@@ -124,19 +66,27 @@ class Method[**P, R]:
 
         return register
 
-    def __call__(self, m: type, /, *args: P.args, **kwargs: P.kwargs) -> R:
-        impl = self._instances.get(m)
+    def _resolve(self, monad: type) -> Callable[P, R]:
+        impl = self._instances.get(monad)
         if impl is None:
             raise TypeError(
-                f"no instance of {self.name!r} for monad {m.__name__!r} "
+                f"no instance of {self.name!r} for monad {monad.__name__!r} "
                 "(register one with .instance)"
             )
+        return impl
+
+    def _call_cached(
+        self, impl: Callable[P, R], key_parts: tuple[Any, ...], *args: Any, **kwargs: Any
+    ) -> R:
+        """Call ``impl`` under the ``shared`` memo: outside a context, call straight
+        through; inside, key by ``(name, *key_parts, *arg-ids, *kwarg-ids)`` so a network
+        forward runs once per (caller-distinguished) argument identity."""
         cache = _shared.get()
         if cache is None:
             return impl(*args, **kwargs)
         key = (
             self.name,
-            m,
+            *key_parts,
             *(id(a) for a in args),
             *((k, id(v)) for k, v in sorted(kwargs.items())),
         )
@@ -145,6 +95,53 @@ class Method[**P, R]:
             # temporary (a false hit)
             cache[key] = (args, kwargs, impl(*args, **kwargs))
         return cast(R, cache[key][2])
+
+
+class monad_method[**P, R](_DispatchTable[P, R]):
+    """A type-class method used as a CLASS ATTRIBUTE, so each example object gets its own
+    dispatch context via ``self``. Same registry-and-lookup machinery as :class:`Method`,
+    but the descriptor protocol binds the instance and the memo key folds in ``id(self)``
+    (so memoization does not collide across different example instances)."""
+
+    def __init__(self, fn: Callable[P, R]) -> None:
+        super().__init__(fn.__name__)
+        self.fn = fn
+        self.owner: type | None = None
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.owner = owner
+        self.name = f"{owner.__name__}.{name}"
+
+    def __get__(self, obj: Any, objtype: type | None = None) -> Any:
+        """Support both bound (instance.digit(...)) and unbound (Class.digit) access."""
+        if obj is None:
+            return self
+        # Return a bound version that fills in `self` (the instance)
+        import functools
+
+        return functools.partial(self._dispatch, obj)
+
+    def _dispatch(self, slf: Any, monad: type, *args: Any, **kwargs: Any) -> R:
+        return self._call_cached(
+            self._resolve(monad), (monad, id(slf)), slf, *args, **kwargs
+        )
+
+    def __call__(self, *args: Any, **kwargs: Any) -> R:
+        # Called unbound (e.g. from inside __set_name__ or class body)
+        # or when __get__ hasn't been invoked.
+        return self._dispatch(*args, **kwargs)
+
+
+class Method[**P, R](_DispatchTable[P, R]):
+    """A type-class method: one instance per monad class, dispatched at call time, as a
+    GLOBAL registry shared across all call sites (a module-level singleton).
+
+    ``P`` = the instance parameter list (without the monad), ``R`` = the union of the
+    per-monad result types.
+    """
+
+    def __call__(self, m: type, /, *args: P.args, **kwargs: P.kwargs) -> R:
+        return self._call_cached(self._resolve(m), (m,), *args, **kwargs)
 
 
 @contextlib.contextmanager

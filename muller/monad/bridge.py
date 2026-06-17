@@ -22,7 +22,7 @@ from typing import Any
 
 import torch
 
-from .dist import Dist, FiniteSupport
+from .dist import Bind, Dist, FiniteSupport, Pure, Uniform
 from .logtens import LogDefer, LogLeaf, LogTens
 
 # eps = 1e-13: the inlined `clampNotZero`, floors exact zeros so `log` stays finite.
@@ -30,39 +30,58 @@ _EPS = 1e-13
 
 
 class Bridge[M1, M2](ABC):
+    @staticmethod
     @abstractmethod
-    def encode(self, support: list[Any], probs: torch.Tensor) -> M2:
+    def encode(support: list[Any], probs: torch.Tensor) -> M2:
         """The batched embedding of a ``[B, k]`` probability tensor into ``M2``."""
         raise NotImplementedError
 
+    @staticmethod
     @abstractmethod
-    def decode(self, m2: M2) -> M1:
+    def decode(m2: M2) -> M1:
         """The readout ``M2 -> M1``."""
         raise NotImplementedError
 
 
 class DistLogTensBridge(Bridge[Dist[Any], LogTens[Any]]):
-    def encode[A](self, support: list[A], probs: torch.Tensor) -> LogTens[A]:
+    @staticmethod
+    def encode[A](support: list[A], probs: torch.Tensor) -> LogTens[A]:
         """Embed a batched distribution into the log world: a support (length ``k``) plus
         a per-row probability tensor ``probs : [B, k]`` (a one-hot for a certain
         observation, or any distribution) -> the ``LogTens`` leaf of log-weights
         ``log((1 - eps) p + eps)``. The embedding op the examples use for observations."""
         return LogLeaf(support, torch.log(probs * (1 - _EPS) + _EPS))
 
-    def enc_dist[A](self, dist: Dist[A]) -> LogTens[A]:
-        """The ``Dist => LogTens`` monad morphism (the Haskell ``encDist``): a finite
-        distribution to its log-weight leaf. On a certain value ``eta x`` it is just
-        ``pure x`` in ``LogTens`` — the case a two-sided neural symbol's ``Dist`` reading
-        (``decode . dig@LogTens model . enc_dist``) uses."""
-        match dist:
-            case FiniteSupport(support):
-                support = [s for s, _ in support]
-                probs = torch.tensor([p for _, p in dist.support], dtype=torch.float)
-                return LogLeaf(support, torch.log(probs * (1 - _EPS) + _EPS))
-            case _:
-                raise ValueError("enc_dist: expected a FiniteSupport distribution")
+    @staticmethod
+    def enc_dist[A](dist: Dist[A]) -> LogTens[A]:
+        """The TOTAL ``Dist => LogTens`` monad morphism (the Haskell ``encDist``), defined
+        on all four ``Dist`` constructors so the two-sided neural symbol's ``Dist``
+        reading (``decode . dig@LogTens . enc_dist``) works on any distribution handed it:
 
-    def decode[A](self, logtens: LogTens[A]) -> Dist[A]:
+        - ``Pure x`` (``eta x``) -> ``pure x`` in ``LogTens`` (the certain-value case);
+        - ``Bind m k`` -> the functorial image of the bind (the morphism is monadic);
+        - ``FiniteSupport`` / ``Uniform`` -> the log-weight leaf over the support.
+        """
+        match dist:
+            case Pure(x):
+                return LogTens.pure(x)
+            case Bind(m, k):
+                return LogTens.bind(
+                    DistLogTensBridge.enc_dist(m),
+                    lambda x: DistLogTensBridge.enc_dist(k(x)),
+                )
+            case FiniteSupport(support):
+                values = [s for s, _ in support]
+                probs = torch.tensor([p for _, p in support], dtype=torch.float)
+                return LogLeaf(values, torch.log(probs * (1 - _EPS) + _EPS))
+            case Uniform(values):
+                probs = torch.full((len(values),), 1.0 / len(values))
+                return DistLogTensBridge.encode(values, probs.unsqueeze(0))
+            case _:
+                raise ValueError("enc_dist: unhandled Dist constructor")
+
+    @staticmethod
+    def decode[A](logtens: LogTens[A]) -> Dist[A]:
         """Read a ``LogTens`` leaf out as a probability distribution: softmax its
         log-weights over the leaf's own support — the ``Dist`` READING / readout, per ex.
         Accepts a per-instance leaf (``[k]``, softmaxed directly) or a batched one

@@ -19,7 +19,20 @@ from .logic import (
     log_vec_nll,
     log_vec_ptrue,
 )
-from .metrics import Report, accuracy, average_reports, print_report, run_average
+from .metrics import (
+    Report,
+    accuracy,
+    average_reports,
+    confidence,
+    f1_score,
+    mean_std,
+    precision,
+    print_report,
+    print_summary,
+    recall,
+    run_average,
+    summarize_reports,
+)
 from .monad import (
     Bridge,
     Dist,
@@ -55,6 +68,13 @@ __all__ = [
     "average_reports",
     "big_vee",
     "big_wedge",
+    "confidence",
+    "f1_score",
+    "mean_std",
+    "precision",
+    "recall",
+    "summarize_reports",
+    "print_summary",
     "ForAll",
     "Exists",
     "convex",
