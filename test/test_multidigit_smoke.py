@@ -24,23 +24,29 @@ def _synthetic_data(n_quads: int) -> md.Data:
     return md.Data(train_batch, groups, sums, groups, sums, labs)  # type: ignore[arg-type]
 
 
+def _objective(example: md.MnistMultiDigit):  # type: ignore[no-untyped-def]
+    """Adapt the OO ``Example.objective`` to the ``(model, batch)`` training contract."""
+    return lambda model, batch: example.objective(batch)
+
+
 def test_loss_decreases_on_tiny_dataset() -> None:
     data = _synthetic_data(md.BATCH)  # exactly one batch per epoch
-    model = md.init_params(torch.Generator().manual_seed(0))
+    model = md.init_model(torch.Generator().manual_seed(0))
+    objective = _objective(md._build(model))
     batch0 = next(md.batches(0, data))
     with torch.no_grad():
-        loss_before = float(md.objective(model, batch0))
-    model = train_batched(
-        False, model, 20, 1e-3, lambda e, d: list(md.batches(e, d)), data, md.objective
+        loss_before = float(objective(model, batch0))
+    train_batched(
+        False, model, 20, 1e-3, lambda e, d: list(md.batches(e, d)), data, objective
     )
     with torch.no_grad():
-        loss_after = float(md.objective(model, batch0))
+        loss_after = float(objective(model, batch0))
     assert loss_after < loss_before
 
 
 def test_report_shape() -> None:
     data = _synthetic_data(8)
-    model = md.init_params(torch.Generator().manual_seed(0))
+    model = md.init_model(torch.Generator().manual_seed(0))
     rep = md.report(model, data)
     labels = [label for label, _ in rep.metrics]
     assert labels == ["Sum-acc(train)", "Sum-acc(test)", "Digit-acc"]

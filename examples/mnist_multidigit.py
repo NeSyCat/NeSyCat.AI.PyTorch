@@ -22,19 +22,20 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, overload
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from torchvision.datasets import MNIST
 
+from examples.mnist_addition import Example
 from muller import (
     Dist,
     DistLogTensBridge,
     Formula,
     LogDefer,
     LogTens,
-    Method,
+    Monad,
     Report,
     accuracy,
     big_wedge,
@@ -44,9 +45,8 @@ from muller import (
     run_average,
     train_batched,
 )
-
-# the Dist <-> LogTens bridge (the encode / enc_dist / decode methods live here).
-_BRIDGE = DistLogTensBridge()
+from muller.dispatch import monad_method
+from muller.monad.interpretation import Interpretation
 
 # ---------------- the network: an ordinary torch nn ----------------
 #
@@ -78,38 +78,7 @@ class MnistCNN(torch.nn.Module):
 
 # ---------------- domain: the neural Kleisli symbol (reused four times) ----------------
 
-# class MnistKlFun m where digit :: MnistCNN -> Image -> m Digit
-_digit = Method[[MnistCNN, torch.Tensor], LogTens[int] | Dist[int]]("digit")
-
-
-@_digit.instance(LogTens)  # instance MnistKlFun LogTens where
-def _digit_logtens(model: MnistCNN, img: torch.Tensor) -> LogTens[int]:
-    # PER INSTANCE: record the image, DEFER the forward. The quantifier stacks the images
-    # of this leaf position across the batch and runs the CNN exactly ONCE.
-    return LogDefer(list(range(10)), img, model)
-
-
-@_digit.instance(Dist)  # instance MnistKlFun Dist where
-def _digit_dist(model: MnistCNN, img: torch.Tensor) -> Dist[int]:
-    return _BRIDGE.decode(digit(LogTens, model, img.unsqueeze(0)))
-
-
-@overload
-def digit(m: type[LogTens[Any]], model: MnistCNN, img: torch.Tensor) -> LogTens[int]: ...
-@overload
-def digit(m: type[Dist[Any]], model: MnistCNN, img: torch.Tensor) -> Dist[int]: ...
-def digit(m: type, model: MnistCNN, img: torch.Tensor) -> Any:
-    return _digit(m, model, img)
-
-
-def init_params(generator: torch.Generator | None = None) -> MnistCNN:
-    """A fresh model — a new CNN. Seed init via the global RNG for reproducibility."""
-    if generator is not None:
-        torch.manual_seed(generator.initial_seed())
-    return MnistCNN()
-
-
-# ---------------- grammar: the formula and the sentence ----------------
+type Image = torch.Tensor  # a (batch of) image(s) [., 1, 28, 28]
 
 MAX_SUM = 198  # two two-digit numbers: 99 + 99
 
@@ -119,29 +88,87 @@ def number(hi: int, lo: int) -> int:
     return 10 * hi + lo
 
 
-def formula(
-    m: type,
-    model: MnistCNN,
-    x1: torch.Tensor,
-    x2: torch.Tensor,
-    y1: torch.Tensor,
-    y2: torch.Tensor,
-    n: LogTens[int],
-) -> Formula[bool]:
-    """n = number(x1, x2) + number(y1, y2) — written ONCE over the WHOLE batch (the four
-    image stacks and the observed-sum leaf ``n`` all arrive batched, eta from data)."""
-    d1 = yield digit(m, model, x1)  # high digit of number A
-    d2 = yield digit(m, model, x2)  # low  digit of number A
-    d3 = yield digit(m, model, y1)  # high digit of number B
-    d4 = yield digit(m, model, y2)  # low  digit of number B
-    s = yield n
-    return bool(s == number(d1, d2) + number(d3, d4))
+class MnistMultiDigitInterpretationDist(Interpretation[Dist[Any]]):
+    pass
 
 
-def sentence(m: type, model: MnistCNN, batch: Batch) -> Any:
-    """bigWedge (x1, x2, y1, y2, n) in data.  formula — at LogTens the guard IS the batched
-    quintuple, read once over the whole batch."""
-    return big_wedge(m, batch, lambda g: formula(m, model, *g))
+class MnistMultiDigitInterpretationLogTens(Interpretation[LogTens[Any]]):
+    pass
+
+
+class MnistMultiDigit(
+    Example[
+        Dist,
+        LogTens,
+        MnistMultiDigitInterpretationDist,
+        MnistMultiDigitInterpretationLogTens,
+    ],
+    DistLogTensBridge,
+):
+    """The single-digit neural Kleisli symbol, called four times by the formula — the SAME
+    shape as ``MNistAddition``, only the formula binds ``digit`` four times not two."""
+
+    @monad_method
+    def digit(self, img: Monad[Image]) -> Monad[int]: ...
+
+    @digit.instance(LogTens)
+    def digit_logtens(self, img: LogTens[Image]) -> LogTens[int]:
+        # PER INSTANCE: record the image, DEFER the forward. The quantifier stacks the
+        # images of this leaf position across the batch and runs the CNN exactly ONCE.
+        model = self.tensor_interpretation.models[type(self).digit]
+        return LogTens.bind(img, lambda x: LogDefer(list(range(10)), x, model))
+
+    @digit.instance(Dist)
+    def digit_dist(self, img: Dist[Image]) -> Dist[int]:
+        return self.decode(self.digit(LogTens, self.enc_dist(img)))
+
+    def formula(
+        self,
+        m: type,
+        x1: Monad[Image],
+        x2: Monad[Image],
+        y1: Monad[Image],
+        y2: Monad[Image],
+        n: Monad[int],
+    ) -> Formula[bool]:
+        """n = number(x1, x2) + number(y1, y2) — written ONCE over the WHOLE batch (the
+        four image stacks and the observed-sum leaf ``n`` all arrive batched, eta from
+        data)."""
+        d1 = yield self.digit(m, x1)  # high digit of number A
+        d2 = yield self.digit(m, x2)  # low  digit of number A
+        d3 = yield self.digit(m, y1)  # high digit of number B
+        d4 = yield self.digit(m, y2)  # low  digit of number B
+        s = yield n
+        return bool(s == number(d1, d2) + number(d3, d4))
+
+    def sentence(self, batch: Batch) -> LogTens[bool]:
+        """bigWedge (x1, x2, y1, y2, n) in data.  formula — at LogTens the guard IS the
+        batched quintuple, read once over the whole batch."""
+        return big_wedge(LogTens, batch, lambda g: self.formula(LogTens, *g))
+
+    def objective(self, batch: Batch) -> torch.Tensor:
+        """The generic objective: the knowledge loss of the sentence's LogTens reading."""
+        return neg_log(self.sentence(batch))
+
+
+def _build(model: MnistCNN) -> MnistMultiDigit:
+    """Assemble the example for a model: wire the CNN into both interpretations (keyed by
+    the ``digit`` symbol), so ``digit`` resolves it at either monad."""
+    models: dict[monad_method, torch.nn.Module] = {MnistMultiDigit.digit: model}
+    return MnistMultiDigit(
+        MnistMultiDigitInterpretationDist(models, Dist),
+        MnistMultiDigitInterpretationLogTens(models, LogTens),
+    )
+
+
+def init_model(generator: torch.Generator | None = None) -> MnistCNN:
+    """A fresh model — a new CNN. Construction is scoped to the given generator's seed via
+    ``fork_rng``, so seeding for reproducibility does NOT perturb the global RNG."""
+    if generator is None:
+        return MnistCNN()
+    with torch.random.fork_rng():
+        torch.manual_seed(generator.initial_seed())
+        return MnistCNN()
 
 
 # ---------------- data: image quadruples + the observed sum (eta n) ----------------
@@ -152,21 +179,36 @@ BATCH = 32
 EPOCHS = 30
 LR = 1e-3
 _MULTS = [
-    997, 1031, 1033, 1039, 1049, 1051, 1061, 1063,
-    1069, 1087, 1091, 1093, 1097, 1103, 1109, 1117,
+    997,
+    1031,
+    1033,
+    1039,
+    1049,
+    1051,
+    1061,
+    1063,
+    1069,
+    1087,
+    1091,
+    1093,
+    1097,
+    1103,
+    1109,
+    1117,
 ]
 
-# A training batch is the batched quintuple: four image stacks + the observed-sum leaf.
+# A training batch is the batched quintuple: four image eta-leaves + the observed-sum.
 type Batch = tuple[
-    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, LogTens[int]
+    LogTens[Image], LogTens[Image], LogTens[Image], LogTens[Image], LogTens[int]
 ]
+
 
 def _encode_obs(sums: list[int]) -> LogTens[int]:
-    """``eta n`` — the observed sums as ONE batched ``LogTens`` leaf over ``[0..MAX_SUM]``:
+    """``eta n`` — the observed sums as ONE batched ``LogTens`` leaf over [0..MAX_SUM]:
     a one-hot ``[B, MAX_SUM+1]`` tensor embedded via the bridge's batched ``encode``.
     Built ONCE; ``batches`` slices it. Mirrors the Haskell ``encode [0..198] oneHot``."""
     onehot = F.one_hot(torch.tensor(sums), MAX_SUM + 1).float()  # [B, MAX_SUM+1]
-    return _BRIDGE.encode(list(range(MAX_SUM + 1)), onehot)
+    return DistLogTensBridge.encode(list(range(MAX_SUM + 1)), onehot)
 
 
 @dataclass
@@ -228,10 +270,10 @@ def batches(epoch: int, data: Data) -> Iterator[Batch]:
 
     for start in range(0, total, BATCH):
         yield (
-            take(g1, start),
-            take(g2, start),
-            take(g3, start),
-            take(g4, start),
+            LogTens.pure(take(g1, start)),
+            LogTens.pure(take(g2, start)),
+            LogTens.pure(take(g3, start)),
+            LogTens.pure(take(g4, start)),
             map_leaf_weights(lambda lw, s=start: take(lw, s), obs_g),
         )
 
@@ -239,28 +281,24 @@ def batches(epoch: int, data: Data) -> Iterator[Batch]:
 # ---------------- inference + benchmark ----------------
 
 
-def objective(model: MnistCNN, batch: Batch) -> torch.Tensor:
-    """The generic objective: the knowledge loss of the sentence's LogTens reading."""
-    return neg_log(sentence(LogTens, model, batch))
-
-
-def _pred_digits(model: MnistCNN, imgs: torch.Tensor) -> torch.Tensor:
-    return log_vec_leaf_tensor(digit(LogTens, model, imgs)).argmax(dim=1)
+def _pred_digits(example: MnistMultiDigit, imgs: torch.Tensor) -> torch.Tensor:
+    leaf = example.digit(LogTens, LogTens.pure(imgs))
+    return log_vec_leaf_tensor(leaf).argmax(dim=1)
 
 
 def report(model: MnistCNN, data: Data) -> Report:
     """Benchmark-time inference (NO training): the classifier's argmax. A two-digit
     number is 10*argmax(hi) + argmax(lo)."""
+    example = _build(model)
     with torch.no_grad():
+
         def pred_sum(
             groups: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         ) -> list[int]:
-            d1, d2, d3, d4 = (_pred_digits(model, g) for g in groups)
+            d1, d2, d3, d4 = (_pred_digits(example, g) for g in groups)
             return (10 * d1 + d2 + 10 * d3 + d4).tolist()
 
-        digits = [
-            x for g in data.test for x in _pred_digits(model, g).tolist()
-        ]
+        digits = [x for g in data.test for x in _pred_digits(example, g).tolist()]
         labels = [x for col in data.test_labels for x in col]
     return Report(
         [
@@ -289,14 +327,17 @@ def main() -> None:
 
     def one_run() -> Report:
         gen = torch.Generator().manual_seed(args.seed + next(run_idx))
-        model = train_batched(
+        model = init_model(gen)  # stepped in place; the example holds this same module
+
+        example = _build(model)
+        train_batched(
             args.n == 1,
-            init_params(gen),
+            model,
             EPOCHS,
             LR,
             lambda e, d: list(batches(e, d)),
             data,
-            objective,
+            lambda _model, b: example.objective(b),
         )
         return report(model, data)
 
