@@ -4,7 +4,7 @@ inter-monad structure in the framework, as METHODS on :class:`DistLogTensBridge`
 
     encode   : list[A], Tensor -> LogTens[A]  # log a [B,k] prob tensor (EMBEDDING, batch)
     enc_dist : Dist[A]         -> LogTens[A]  # the Dist => LogTens morphism (encDist)
-    decode   : LogTens[A]       -> Dist[A]    # softmax a single-row leaf (READING, per ex)
+    decode   : LogTens[A]      -> Dist[A]   # softmax a single-row leaf (READING, per ex)
 
 ``encode``/``decode`` are the section-retraction pair (``decode . encode = id`` up to
 normalization), each realized at the granularity it is used: observations/inputs are
@@ -23,7 +23,9 @@ from typing import Any
 import torch
 
 from .dist import Bind, Dist, FiniteSupport, Pure, Uniform
+from .logtens import Bind as LogBind
 from .logtens import LogDefer, LogLeaf, LogTens
+from .logtens import Pure as LogPure
 
 # eps = 1e-13: the inlined `clampNotZero`, floors exact zeros so `log` stays finite.
 _EPS = 1e-13
@@ -86,13 +88,18 @@ class DistLogTensBridge(Bridge[Dist[Any], LogTens[Any]]):
         log-weights over the leaf's own support — the ``Dist`` READING / readout, per ex.
         Accepts a per-instance leaf (``[k]``, softmaxed directly) or a batched one
         (``[B, k]``, first row); a deferred neural leaf is resolved by its forward first.
-        Partial: expects a single leaf (the net's logit leaf)."""
+        A trivial ``eta`` bind ``bind (pure x) f`` is reduced to its leaf (the left-unit
+        law) — this is the shape the two-sided ``digit_dist`` reading
+        (``decode . dig@LogTens . enc_dist``) hands in. Partial: expects a single leaf."""
         match logtens:
             case LogLeaf(support, log_weights):
                 row = log_weights if log_weights.dim() == 1 else log_weights[0, :]
             case LogDefer(support, inp, fwd):
                 logits = fwd(inp)
                 row = logits if logits.dim() == 1 else logits[0, :]
+            case LogBind(LogPure(value), func):
+                # left-unit law  bind (pure x) f = f x: reduce a trivial eta bind
+                return DistLogTensBridge.decode(func(value))
             case _:
                 raise ValueError("decode: expected a single leaf (a neural logit leaf)")
         ps = torch.softmax(row, dim=0).tolist()
